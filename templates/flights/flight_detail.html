@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ flight.origin.name }} → {{ flight.destination.name }}{% endblock %}
+{% block content %}
+<div class="detail-hero" style="background-image: url('{{ flight.destination.image_url }}')">
+  <div>
+    <h1>{{ flight.origin.name }} → {{ flight.destination.name }}</h1>
+    <p>{{ flight.airline.name }} · {{ flight.flight_number }}</p>
+  </div>
+  {% if user.is_authenticated %}
+    <form method="post" action="{% url 'toggle_favorite' flight.pk %}">
+      {% csrf_token %}
+      <button class="btn btn-light">{% if is_favorite %}♥ შენახულია{% else %}♡ შენახვა{% endif %}</button>
+    </form>
+  {% endif %}
+</div>
+
+<form method="post" action="{% url 'book' flight.pk %}" id="booking-form" class="detail-layout"
+      data-economy="{{ flight.economy_price }}" data-business="{{ flight.business_price }}"
+      data-max="{{ max_passengers }}">
+  {% csrf_token %}
+  <section class="card">
+    <h3>ფრენის ინფორმაცია</h3>
+    <ul class="info">
+      <li><span>გაფრენა</span><b>{{ flight.departure_time|date:"d.m.Y H:i" }}</b></li>
+      <li><span>ჩაფრენა</span><b>{{ flight.arrival_time|date:"d.m.Y H:i" }}</b></li>
+      <li><span>ხანგრძლივობა</span><b>{{ flight.duration_display }}</b></li>
+      <li><span>გადაჯდომა</span><b>{% if flight.stops %}{{ flight.stops }}{% else %}პირდაპირი{% endif %}</b></li>
+      <li><span>თავისუფალი ადგილი</span><b>{{ flight.seats_left }} / {{ flight.seats_total }}</b></li>
+      <li><span>ეკონომი</span><b>{{ flight.economy_price|floatformat:0 }} ₾</b></li>
+      <li><span>ბიზნესი</span><b>{{ flight.business_price|floatformat:0 }} ₾</b></li>
+    </ul>
+
+    <h3>აირჩიე ადგილი</h3>
+    <p class="muted">პირველი 2 რიგი — ბიზნეს კლასი. ერთ ჯავშანში ადგილები ერთი კლასიდან უნდა იყოს.</p>
+    <div class="seat-map">
+      {% for row, is_business, seats in seat_map %}
+        <div class="seat-row{% if is_business %} business{% endif %}">
+          <span class="row-num">{{ row }}</span>
+          {% for seat, taken in seats %}
+            {% if forloop.counter == 4 %}<span class="aisle"></span>{% endif %}
+            <button type="button" class="seat{% if taken %} taken{% endif %}"
+                    data-seat="{{ seat }}" data-cabin="{% if is_business %}business{% else %}economy{% endif %}"
+                    {% if taken %}disabled{% endif %}>{{ seat|slice:"-1:" }}</button>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="legend">
+      <span><i class="seat"></i> თავისუფალი</span>
+      <span><i class="seat selected"></i> არჩეული</span>
+      <span><i class="seat taken"></i> დაკავებული</span>
+    </div>
+  </section>
+
+  <aside class="card">
+    <h3>მგზავრები</h3>
+    <div id="passengers"><p class="muted">აირჩიე ადგილი სქემაზე</p></div>
+    <div class="total"><span>სულ:</span><b id="total">0 ₾</b></div>
+    <p class="error" id="seat-error"></p>
+    {% if user.is_authenticated %}
+      <button class="btn btn-block" id="book-btn" disabled>დაჯავშნა</button>
+    {% else %}
+      <a class="btn btn-block" href="{% url 'login' %}?next={{ request.path|urlencode }}">შედი დასაჯავშნად</a>
+    {% endif %}
+  </aside>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/seats.js' %}"></script>
+{% endblock %}

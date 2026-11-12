@@ -1,0 +1,25 @@
+<a class="card flight-card" href="{% url 'flight_detail' flight.pk %}">
+  <img src="{{ flight.destination.image_url }}" alt="{{ flight.destination.name }}" loading="lazy">
+  <div class="body">
+    <div class="airline">{{ flight.airline.name }} · {{ flight.flight_number }}</div>
+    <div class="route">
+      <div>
+        <strong>{{ flight.departure_time|time:"H:i" }}</strong>
+        <span>{{ flight.origin.name }}</span>
+      </div>
+      <div class="line">
+        <small>{{ flight.duration_display }}</small>
+        <hr>
+        <small>{% if flight.stops %}{{ flight.stops }} გადაჯდომა{% else %}პირდაპირი{% endif %}</small>
+      </div>
+      <div>
+        <strong>{{ flight.arrival_time|time:"H:i" }}</strong>
+        <span>{{ flight.destination.name }}</span>
+      </div>
+    </div>
+    <div class="footer">
+      <span>{{ flight.departure_time|date:"d.m.Y" }}</span>
+      <span class="price">{{ flight.economy_price|floatformat:0 }} ₾</span>
+    </div>
+  </div>
+</a>

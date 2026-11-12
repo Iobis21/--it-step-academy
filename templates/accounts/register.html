@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}რეგისტრაცია{% endblock %}
+{% block content %}
+<div class="card auth-card">
+  <h1>რეგისტრაცია</h1>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.GET.next }}">
+    {% include 'partials/form_fields.html' %}
+    <button class="btn btn-block" type="submit">რეგისტრაცია</button>
+  </form>
+  <p>უკვე გაქვს ანგარიში? <a href="{% url 'login' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">შესვლა</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% if form.non_field_errors %}
+  <div class="alert alert-error">{{ form.non_field_errors|join:" " }}</div>
+{% endif %}
+{% for field in form %}
+  <label class="{% if field.field.widget.input_type == 'checkbox' %}check{% endif %}">
+    {{ field.label }}
+    {{ field }}
+    {% for error in field.errors %}<small class="error">{{ error }}</small>{% endfor %}
+  </label>
+{% endfor %}

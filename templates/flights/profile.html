@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}პროფილი{% endblock %}
+{% block content %}
+<section class="card profile-head">
+  <div class="avatar">{{ user.first_name|slice:":1" }}{{ user.last_name|slice:":1" }}</div>
+  <div>
+    <h1>{{ user.first_name }} {{ user.last_name }}</h1>
+    <p class="muted">{{ user.email }} · {{ user.phone }}</p>
+  </div>
+</section>
+
+<h2>ჩემი ჯავშნები ({{ bookings|length }})</h2>
+{% for b in bookings %}
+  <div class="card booking{% if b.status == 'cancelled' %} cancelled{% endif %}">
+    <div>
+      <h3><a href="{% url 'flight_detail' b.flight.pk %}">{{ b.flight.origin.name }} → {{ b.flight.destination.name }}</a></h3>
+      <p class="muted">{{ b.flight.airline.name }} · {{ b.flight.flight_number }} · {{ b.flight.departure_time|date:"d.m.Y H:i" }}</p>
+      <p>{{ b.get_cabin_display }} · ჯავშანი #{{ b.pk }}</p>
+      <ul class="passenger-list">
+        {% for p in b.passengers.all %}<li>{{ p.seat }} — {{ p.first_name }} {{ p.last_name }}</li>{% endfor %}
+      </ul>
+    </div>
+    <div class="booking-side">
+      <b>{{ b.total_price|floatformat:0 }} ₾</b>
+      {% if b.status == 'active' %}
+        <form method="post" action="{% url 'cancel_booking' b.pk %}" onsubmit="return confirm('ნამდვილად გსურს ჯავშნის გაუქმება?')">
+          {% csrf_token %}
+          <button class="btn btn-danger">გაუქმება</button>
+        </form>
+      {% else %}
+        <span class="badge">გაუქმებულია</span>
+      {% endif %}
+    </div>
+  </div>
+{% empty %}
+  <p class="muted">ჯერ არ გაქვს ჯავშნები. <a href="{% url 'search' %}">მოძებნე ფრენა</a></p>
+{% endfor %}
+
+<h2>შენახული ფრენები</h2>
+<div class="grid">
+  {% for flight in favorites %}
+    {% include 'partials/flight_card.html' %}
+  {% empty %}
+    <p class="muted">შენახული ფრენები არ გაქვს.</p>
+  {% endfor %}
+</div>
+{% endblock %}
