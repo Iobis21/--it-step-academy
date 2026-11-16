@@ -51,7 +51,8 @@ python manage.py test
 
 - ქალაქების ფოტოები — [Unsplash](https://unsplash.com)
 - ბათუმი — [Batumi from the hill](https://commons.wikimedia.org/wiki/File:Batumi_from_the_hill.jpg), Wikimedia Commons
-- ქუთაისი — [Bagrati Cathedral](https://commons.wikimedia.org/wiki/File:2014_Kutaisi,_Katedra_Bagrati_(04).jpg), Wikimedia Commons
+- თბილისი — [Bridge of Peace on River Mtkvari](https://commons.wikimedia.org/wiki/File:Bridge_of_Peace_on_River_Mtkvari.jpg), Wikimedia Commons
+- ქუთაისი — [Rioni river](https://commons.wikimedia.org/wiki/File:2014_Kutaisi,_Rzeka_Rioni_obok_Mostu_Łańcuchowego_(01).jpg), Wikimedia Commons
 
 ## სტრუქტურა
 

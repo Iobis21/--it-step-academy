@@ -12,7 +12,7 @@ from django.utils import timezone
 
 # ქალაქი, აეროპორტის კოდი, სურათი, (განედი, გრძედი), საქართველოშია თუ არა
 CITIES = [
-    ('თბილისი', 'TBS', 'https://images.unsplash.com/photo-1565008576549-57569a49371d?w=800', (41.67, 44.95), True),
+    ('თბილისი', 'TBS', '/static/img/tbilisi.jpg', (41.67, 44.95), True),
     ('ბათუმი', 'BUS', '/static/img/batumi.jpg', (41.61, 41.60), True),
     ('ქუთაისი', 'KUT', '/static/img/kutaisi.jpg', (42.18, 42.48), True),
     ('სტამბოლი', 'IST', 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=800', (41.26, 28.74), False),
