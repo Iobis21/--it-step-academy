@@ -407,6 +407,18 @@ label.check input { width: auto; margin: 0; accent-color: var(--primary); }
   .barcode { background: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 4px, #000 4px 5px, transparent 5px 8px); }
 }
 
+/* ===== პაროლის ჩვენება ===== */
+.password-field { position: relative; margin-top: 5px; }
+.password-field input { margin-top: 0; padding-right: 46px; }
+.password-toggle {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; border: 0; border-radius: 8px; cursor: pointer;
+  background: transparent; font-size: 17px; line-height: 1; opacity: .75;
+  transition: background .2s, opacity .2s;
+}
+.password-toggle:hover { opacity: 1; background: rgba(255, 255, 255, .15); }
+.password-toggle:focus-visible { outline: 2px solid #7dd3fc; }
+
 /* ===== ჰოვერის ეფექტები =====
    პრინციპი: ჰოვერი მხოლოდ იმაზე, რაზეც დაჭერა შეიძლება; რბილი, ერთნაირი მოძრაობა. */
 :root { --ease: cubic-bezier(.2, .8, .2, 1); --glow: 0 0 0 1px rgba(186, 230, 253, .55), 0 12px 32px rgba(8, 47, 90, .45); }
