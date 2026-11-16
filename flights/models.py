@@ -206,8 +206,12 @@ class Booking(models.Model):
         ACTIVE = 'active', 'გადახდილი'
         CANCELLED = 'cancelled', 'გაუქმებული'
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings')
-    pnr = models.CharField('ჯავშნის კოდი', max_length=6, unique=True, null=True, blank=True)
+    # user ცარიელია, თუ ბილეთი რეგისტრაციის გარეშე (სტუმრად) იყიდა
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings',
+                             null=True, blank=True)
+    contact_email = models.EmailField('საკონტაქტო ელ-ფოსტა', blank=True)
+    contact_phone = models.CharField('საკონტაქტო ტელეფონი', max_length=20, blank=True)
+    pnr =models.CharField('ჯავშნის კოდი', max_length=6, unique=True, null=True, blank=True)
     flight = models.ForeignKey(Flight, on_delete=models.PROTECT, related_name='bookings')
     return_flight = models.ForeignKey(
         Flight, on_delete=models.PROTECT, related_name='return_bookings',
@@ -227,7 +231,7 @@ class Booking(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.pnr} {self.user} — {self.flight}'
+        return f'{self.pnr} {self.contact_email} — {self.flight}'
 
     def save(self, *args, **kwargs):
         # ახალ ჯავშანს ავტომატურად ვანიჭებთ ბილეთის ნომერს

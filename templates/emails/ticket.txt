@@ -1,0 +1,20 @@
+გამარჯობა!
+
+გმადლობთ, რომ SkyBook აირჩიეთ. თქვენი ბილეთი გადახდილია.
+
+ბილეთის ნომერი: {{ booking.pnr }}
+კლასი: {{ booking.get_cabin_display }}
+ჯამი: {{ booking.total_price|floatformat:0 }} ₾
+{% for flight, passengers in legs %}
+{% if booking.is_round_trip %}{% if forloop.first %}წასვლა{% else %}დაბრუნება{% endif %}: {% endif %}{{ flight.origin.name }} ({{ flight.origin.airport_code }}) → {{ flight.destination.name }} ({{ flight.destination.airport_code }})
+ფრენა: {{ flight.airline.name }} {{ flight.flight_number }}
+გაფრენა: {{ flight.departure_time|date:"d.m.Y H:i" }} · ჩაფრენა: {{ flight.arrival_time|date:"d.m.Y H:i" }}
+{% for p in passengers %}  - {{ p.last_name|upper }} {{ p.first_name|upper }}, ადგილი {{ p.seat }} ({{ p.baggage_lines|join:", " }})
+{% endfor %}{% endfor %}
+ბილეთის ნახვა: {{ ticket_url }}
+(ან {{ checkin_url }} — შეიყვანეთ ბილეთის ნომერი და მგზავრის გვარი)
+
+ბილეთის გვერდზე შეგიძლიათ გაიაროთ ონლაინ რეგისტრაცია, ამობეჭდოთ ბილეთი ან დააბრუნოთ ის.
+
+კარგ ფრენას გისურვებთ! ✈
+SkyBook

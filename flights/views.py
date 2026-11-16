@@ -2,10 +2,13 @@ from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from .emails import send_ticket_email
 from .forms import CheckInForm, FlightSearchForm, PaymentForm
 from .models import (
     MAX_EXTRA_CHECKED, PAYMENT_MINUTES, PERSONAL_ITEM_SIZE,
@@ -231,9 +234,23 @@ def save_passengers(booking, flight, seats, passengers, cabin):
         )
 
 
-@login_required
+def read_contact(request):
+    """საკონტაქტო ელ-ფოსტა და ტელეფონი. რეგისტრირებულს ანგარიშიდან ვიღებთ."""
+    if request.user.is_authenticated:
+        return request.user.email, request.user.phone, None
+
+    email = request.POST.get('contact_email', '').strip()
+    phone = request.POST.get('contact_phone', '').strip()
+    try:
+        validate_email(email)
+    except ValidationError:
+        return None, None, 'მიუთითე სწორი ელ-ფოსტა — ბილეთი ამ მისამართზე გამოიგზავნება'
+    return email, phone, None
+
+
 @require_POST
 def book(request, pk):
+    """დაჯავშნა — შეუძლია როგორც რეგისტრირებულს, ისე სტუმარს (ელ-ფოსტით)."""
     flight = get_object_or_404(Flight, pk=pk)
     seats = request.POST.getlist('seat')
     return_seats = request.POST.getlist('return_seat')
@@ -261,6 +278,15 @@ def book(request, pk):
         messages.error(request, 'შეავსე ყველა მგზავრის მონაცემები სწორად')
         return redirect(back_url)
 
+    email, phone, error = read_contact(request)
+    if error:
+        messages.error(request, error)
+        return redirect(back_url)
+
+    user = None
+    if request.user.is_authenticated:
+        user = request.user
+
     # ფასის დათვლა: ბილეთები + დამატებითი ბარგი
     flights = [flight]
     if return_flight:
@@ -274,7 +300,9 @@ def book(request, pk):
             baggage_price += f.extras_price(cabin, p['cabin_bag'], p['checked'])
 
     booking = Booking.objects.create(
-        user=request.user,
+        user=user,
+        contact_email=email,
+        contact_phone=phone,
         flight=flight,
         return_flight=return_flight,
         cabin=cabin,
@@ -311,7 +339,12 @@ def pay(request, pnr):
         booking.paid_at = timezone.now()
         booking.card_last4 = form.cleaned_data['card_number'][-4:]  # ვინახავთ მხოლოდ ბოლო 4 ციფრს
         booking.save()
-        messages.success(request, f'გადახდა წარმატებულია! ბილეთის ნომერი: {booking.pnr}')
+
+        if send_ticket_email(request, booking):
+            messages.success(request, f'გადახდა წარმატებულია! ბილეთი ({booking.pnr}) გაიგზავნა მისამართზე {booking.contact_email}')
+        else:
+            messages.success(request, f'გადახდა წარმატებულია! ბილეთის ნომერი: {booking.pnr}')
+            messages.warning(request, 'ელ-ფოსტის გაგზავნა ვერ მოხერხდა — შეინახეთ ბილეთის ნომერი')
         return redirect('ticket', pnr=pnr)
 
     deadline = booking.created_at + timedelta(minutes=PAYMENT_MINUTES)

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ka">
+<body style="margin:0;padding:24px;background:#eef3fb;font-family:'Segoe UI',Arial,sans-serif;color:#1c2533;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#4da3ff,#7c5cff);color:#ffffff;padding:22px 26px;">
+      <div style="font-size:22px;font-weight:bold;">✈ SkyBook</div>
+      <div style="margin-top:6px;">თქვენი ბილეთი გადახდილია</div>
+    </div>
+    <div style="padding:24px 26px;">
+      <p style="margin:0 0 6px;color:#6b778c;">ბილეთის ნომერი</p>
+      <p style="margin:0 0 18px;font-size:28px;font-weight:bold;letter-spacing:3px;font-family:Consolas,monospace;">{{ booking.pnr }}</p>
+
+      {% for flight, passengers in legs %}
+        <div style="border:1px solid #dde3ec;border-radius:12px;padding:16px;margin-bottom:14px;">
+          {% if booking.is_round_trip %}
+            <div style="color:#6b778c;font-size:13px;margin-bottom:6px;">{% if forloop.first %}✈ წასვლა{% else %}↩ დაბრუნება{% endif %}</div>
+          {% endif %}
+          <div style="font-size:20px;font-weight:bold;">
+            {{ flight.origin.airport_code }} → {{ flight.destination.airport_code }}
+          </div>
+          <div style="color:#6b778c;margin-bottom:10px;">{{ flight.origin.name }} → {{ flight.destination.name }} · {{ flight.airline.name }} {{ flight.flight_number }}</div>
+          <div>გაფრენა: <b>{{ flight.departure_time|date:"d.m.Y H:i" }}</b> · ჩაფრენა: <b>{{ flight.arrival_time|date:"H:i" }}</b></div>
+          <table style="width:100%;margin-top:10px;border-collapse:collapse;font-size:14px;">
+            {% for p in passengers %}
+              <tr style="border-top:1px solid #eef1f5;">
+                <td style="padding:6px 0;"><b>{{ p.last_name|upper }} {{ p.first_name|upper }}</b></td>
+                <td style="padding:6px 0;">ადგილი <b>{{ p.seat }}</b></td>
+                <td style="padding:6px 0;color:#6b778c;">{% for line in p.baggage_lines %}{{ line }}<br>{% endfor %}</td>
+              </tr>
+            {% endfor %}
+          </table>
+        </div>
+      {% endfor %}
+
+      <p>კლასი: <b>{{ booking.get_cabin_display }}</b> · ჯამი: <b>{{ booking.total_price|floatformat:0 }} ₾</b></p>
+      <p style="text-align:center;margin:24px 0;">
+        <a href="{{ ticket_url }}" style="background:#4da3ff;color:#ffffff;padding:12px 26px;border-radius:10px;text-decoration:none;">ბილეთის ნახვა</a>
+      </p>
+      <p style="color:#6b778c;font-size:13px;">ბილეთის გვერდზე შეგიძლიათ გაიაროთ ონლაინ რეგისტრაცია, ამობეჭდოთ ბილეთი ან დააბრუნოთ ის.
+        თუ ბმული არ იხსნება, გადადით <a href="{{ checkin_url }}">{{ checkin_url }}</a> და შეიყვანეთ ბილეთის ნომერი და მგზავრის გვარი.</p>
+    </div>
+  </div>
+</body>
+</html>

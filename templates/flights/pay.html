@@ -29,6 +29,7 @@
   <aside class="card booking-summary">
     <h3>🧾 ინვოისი</h3>
     <p class="muted">ბილეთის ნომერი: <b class="pnr">{{ booking.pnr }}</b></p>
+    <p class="muted small">📧 ბილეთი გაიგზავნება: <b>{{ booking.contact_email }}</b></p>
     <ul class="info">
       <li><span>მარშრუტი</span><b>{{ booking.flight.origin.name }} {% if booking.is_round_trip %}⇄{% else %}→{% endif %} {{ booking.flight.destination.name }}</b></li>
       <li><span>გაფრენა</span><b>{{ booking.flight.departure_time|date:"d.m.Y H:i" }}</b></li>

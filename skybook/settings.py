@@ -136,8 +136,28 @@ WHITENOISE_USE_FINDERS = True
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+# თუ EMAIL_HOST მითითებულია (Vercel-ის Environment Variables), წერილები ნამდვილად იგზავნება SMTP-ით
+# (მაგ. Gmail: EMAIL_HOST=smtp.gmail.com, EMAIL_HOST_USER=..., EMAIL_HOST_PASSWORD=App Password).
+# თუ არა — წერილი უბრალოდ ტერმინალში/ლოგებში იბეჭდება.
+if os.environ.get('EMAIL_HOST'):
+    MAILERS = {
+        'default': {
+            'BACKEND': 'django.core.mail.backends.smtp.EmailBackend',
+            'OPTIONS': {
+                'host': os.environ['EMAIL_HOST'],
+                'port': int(os.environ.get('EMAIL_PORT', 587)),
+                'username': os.environ.get('EMAIL_HOST_USER', ''),
+                'password': os.environ.get('EMAIL_HOST_PASSWORD', ''),
+                'use_tls': True,
+                'timeout': 10,
+            },
+        },
+    }
+else:
+    MAILERS = {
+        'default': {
+            'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+        },
+    }
+
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL') or os.environ.get('EMAIL_HOST_USER') or 'SkyBook <noreply@skybook.ge>'

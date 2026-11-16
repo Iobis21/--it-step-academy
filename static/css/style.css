@@ -220,6 +220,12 @@ label.check input { width: auto; margin: 0; accent-color: var(--primary); }
 .filters .toggles .trip-toggle { margin: 0; }
 .cabin-tag { font-size: 11px; font-weight: 400; color: var(--gold); text-shadow: none; }
 
+.contact-box { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--glass-border); }
+.contact-box label { margin-bottom: 4px; }
+.contact-box .help { margin-bottom: 10px; }
+.req { color: var(--danger); }
+.alert-warning { border-color: rgba(255, 209, 102, .6); color: #fff3c4; }
+
 /* ===== გადახდა ===== */
 .card-preview {
   max-width: 360px; aspect-ratio: 1.586; margin: 16px 0 20px; padding: 20px; border-radius: 16px;

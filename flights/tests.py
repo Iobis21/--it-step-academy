@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.core import mail
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
@@ -42,11 +43,43 @@ class BookingFlowTests(TestCase):
         r = self.client.post(reverse('login'), {'email': 'a@a.ge', 'password': 'Skybook!2026'})
         self.assertRedirects(r, reverse('home'))
 
-    def test_booking_requires_login(self):
-        r = self.book(['5A'])
-        self.assertEqual(r.status_code, 302)
-        self.assertIn(reverse('login'), r['Location'])
+    def test_guest_booking_requires_email(self):
+        # სტუმარი ელ-ფოსტის გარეშე ვერ დაჯავშნის
+        self.book(['5A'])
+        self.client.post(reverse('book', args=[self.flight.pk]), {
+            'seat': ['5A'], 'first_name_5A': 'ა', 'last_name_5A': 'ბ', 'passport_5A': '1',
+            'contact_email': 'not-an-email',
+        })
         self.assertEqual(Booking.objects.count(), 0)
+
+    def test_guest_booking_and_ticket_email(self):
+        r = self.client.post(reverse('book', args=[self.flight.pk]), {
+            'seat': ['5A'], 'first_name_5A': 'ანა', 'last_name_5A': 'ბერიძე', 'passport_5A': '1',
+            'contact_email': 'guest@mail.ge', 'contact_phone': '599111222',
+        })
+        b = Booking.objects.get()
+        self.assertIsNone(b.user)
+        self.assertEqual(b.contact_email, 'guest@mail.ge')
+        self.assertRedirects(r, reverse('pay', args=[b.pnr]))
+
+        self.assertEqual(len(mail.outbox), 0)  # გადახდამდე წერილი არ იგზავნება
+        self.pay(b)
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        self.assertEqual(email.to, ['guest@mail.ge'])
+        self.assertIn(b.pnr, email.subject)
+        self.assertIn('ბერიძე'.upper(), email.body)
+        self.assertIn(f'/ticket/{b.pnr}/', email.body)
+        # სტუმარი ბილეთს იმავე სესიაში ხედავს
+        self.assertContains(self.client.get(reverse('ticket', args=[b.pnr])), b.pnr)
+
+    def test_logged_in_user_email_used(self):
+        user = self.login()
+        self.book(['5A'])
+        b = Booking.objects.get()
+        self.assertEqual((b.user, b.contact_email), (user, user.email))
+        self.pay(b)
+        self.assertEqual(mail.outbox[0].to, [user.email])
 
     def test_book_and_price(self):
         self.login()
