@@ -43,14 +43,14 @@ class BookingFlowTests(TestCase):
         self.assertRedirects(r, reverse('home'))
 
     def test_booking_requires_login(self):
-        r = self.book(['3A'])
+        r = self.book(['5A'])
         self.assertEqual(r.status_code, 302)
         self.assertIn(reverse('login'), r['Location'])
         self.assertEqual(Booking.objects.count(), 0)
 
     def test_book_and_price(self):
         self.login()
-        self.book(['3A', '3B'])
+        self.book(['5A', '5B'])
         b = Booking.objects.get()
         self.assertEqual(b.total_price, self.flight.economy_price * 2)
         self.assertEqual(b.cabin, 'economy')
@@ -58,13 +58,13 @@ class BookingFlowTests(TestCase):
 
     def test_seat_cannot_be_double_booked(self):
         self.login()
-        self.book(['3A'])
-        self.book(['3A'])
+        self.book(['5A'])
+        self.book(['5A'])
         self.assertEqual(Booking.objects.count(), 1)
 
     def test_mixed_cabins_rejected(self):
         self.login()
-        self.book(['1A', '5A'])
+        self.book(['1A', '6A'])
         self.assertEqual(Booking.objects.count(), 0)
 
     def test_cancel_frees_seat(self):
@@ -87,9 +87,9 @@ class BookingFlowTests(TestCase):
         ret = self._make_return()
         d = ret.departure_time.date().isoformat()
         r = self.client.get('/search/', {'trip_type': 'return', 'return_date': d})
-        self.assertContains(r, f'?return_date={d}')
+        self.assertContains(r, f'return_date={d}')
         r = self.client.get(f'/flights/{self.flight.pk}/', {'return_date': d})
-        self.assertContains(r, f'?return={ret.pk}')
+        self.assertContains(r, f'return={ret.pk}')
         r = self.client.get(f'/flights/{self.flight.pk}/', {'return': ret.pk})
         self.assertContains(r, 'data-leg="ret"')
 
@@ -100,8 +100,8 @@ class BookingFlowTests(TestCase):
     def test_round_trip_booking(self):
         ret = self._make_return()
         self.login()
-        data = {'seat': ['3A', '3B'], 'return_seat': ['7C', '7D'], 'return_flight': ret.pk}
-        for s in ['3A', '3B']:
+        data = {'seat': ['5A', '5B'], 'return_seat': ['7C', '7D'], 'return_flight': ret.pk}
+        for s in ['5A', '5B']:
             data.update({f'first_name_{s}': 'ა', f'last_name_{s}': 'ბ', f'passport_{s}': '01001'})
         self.client.post(reverse('book', args=[self.flight.pk]), data)
         b = Booking.objects.get()
@@ -113,8 +113,8 @@ class BookingFlowTests(TestCase):
     def test_round_trip_seat_count_must_match(self):
         ret = self._make_return()
         self.login()
-        data = {'seat': ['3A', '3B'], 'return_seat': ['7C'], 'return_flight': ret.pk}
-        for s in ['3A', '3B']:
+        data = {'seat': ['5A', '5B'], 'return_seat': ['7C'], 'return_flight': ret.pk}
+        for s in ['5A', '5B']:
             data.update({f'first_name_{s}': 'ა', f'last_name_{s}': 'ბ', f'passport_{s}': '01001'})
         self.client.post(reverse('book', args=[self.flight.pk]), data)
         self.assertEqual(Booking.objects.count(), 0)
@@ -130,7 +130,7 @@ class BookingFlowTests(TestCase):
 
     def test_ticket_after_booking_and_checkin(self):
         self.login()
-        r = self.book(['3A'])
+        r = self.book(['5A'])
         b = Booking.objects.get()
         self.assertEqual(len(b.pnr), 6)
         self.assertRedirects(r, reverse('ticket', args=[b.pnr]))
@@ -140,7 +140,7 @@ class BookingFlowTests(TestCase):
 
     def test_ticket_hidden_from_strangers(self):
         self.login()
-        self.book(['3A'])
+        self.book(['5A'])
         b = Booking.objects.get()
         self.client.logout()
         r = self.client.get(reverse('ticket', args=[b.pnr]))
@@ -148,6 +148,20 @@ class BookingFlowTests(TestCase):
         # კოდით + გვარით ხელმისაწვდომია
         r = self.client.post(reverse('checkin'), {'pnr': b.pnr.lower(), 'last_name': 'ბ'})
         self.assertRedirects(r, reverse('ticket', args=[b.pnr]))
+
+    def test_business_booking_and_invalid_seat(self):
+        self.login()
+        self.book(['1B'])  # ბიზნესში B ადგილი არ არსებობს (2+2: A C | D F)
+        self.assertEqual(Booking.objects.count(), 0)
+        self.book(['1A', '1C'])
+        b = Booking.objects.get()
+        self.assertEqual(b.cabin, 'business')
+        self.assertEqual(b.total_price, self.flight.business_price * 2)
+
+    def test_detail_page_shows_plane(self):
+        r = self.client.get(f'/flights/{self.flight.pk}/', {'cabin': 'business'})
+        self.assertContains(r, 'class="plane"')
+        self.assertContains(r, 'value="business" checked')
 
     def test_cannot_cancel_others_booking(self):
         self.login()

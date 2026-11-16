@@ -24,10 +24,15 @@ def home(request):
     return render(request, 'flights/home.html', {'form': FlightSearchForm(), 'flights': cheapest})
 
 
+def _cabin(value):
+    return 'business' if value == 'business' else 'economy'
+
+
 def search(request):
     form = FlightSearchForm(request.GET or None)
     flights = _upcoming()
-    link_suffix = ''
+    cabin = _cabin(request.GET.get('cabin'))
+    link_suffix = f'?cabin={cabin}'
     if form.is_valid():
         d = form.cleaned_data
         if d['origin']:
@@ -38,13 +43,15 @@ def search(request):
             flights = flights.filter(departure_time__date=d['date'])
         if d['airline']:
             flights = flights.filter(airline=d['airline'])
+        price_field = f'{cabin}_price'
         if d['max_price']:
-            flights = flights.filter(economy_price__lte=d['max_price'])
+            flights = flights.filter(**{f'{price_field}__lte': d['max_price']})
         if d['direct_only']:
             flights = flights.filter(stops=0)
-        flights = flights.order_by(d['sort'] or 'departure_time')
+        sort = (d['sort'] or 'departure_time').replace('economy_price', price_field)
+        flights = flights.order_by(sort)
         if d['trip_type'] == FlightSearchForm.RETURN:
-            link_suffix = f'?return_date={d["return_date"].isoformat()}'
+            link_suffix += f'&return_date={d["return_date"].isoformat()}'
     elif form.is_bound:
         flights = flights.none()
     return render(request, 'flights/search.html', {
@@ -52,6 +59,7 @@ def search(request):
         'flights': flights,
         'is_return': form.is_return,
         'link_suffix': link_suffix,
+        'cabin': cabin,
     })
 
 
@@ -73,8 +81,10 @@ def _return_options(flight, return_date):
 
 def flight_detail(request, pk):
     flight = get_object_or_404(Flight.objects.select_related('airline', 'origin', 'destination'), pk=pk)
+    cabin = _cabin(request.GET.get('cabin'))
     context = {
         'flight': flight,
+        'cabin': cabin,
         'seat_map': flight.seat_map(),
         'max_passengers': MAX_PASSENGERS,
         'is_favorite': request.user.is_authenticated
@@ -101,7 +111,7 @@ def flight_detail(request, pk):
             'return_date': parsed,
             'return_options': options,
             'return_exact': exact,
-            'link_base': f'/flights/{flight.pk}/?return=',
+            'link_base': f'/flights/{flight.pk}/?cabin={cabin}&return=',
         })
     return render(request, 'flights/flight_detail.html', context)
 
@@ -128,7 +138,9 @@ def book(request, pk):
     if request.POST.get('return_flight'):
         return_flight = get_object_or_404(Flight, pk=request.POST['return_flight'])
 
-    back_url = f'/flights/{pk}/' + (f'?return={return_flight.pk}' if return_flight else '')
+    back_url = f'/flights/{pk}/?cabin={_cabin(request.POST.get("cabin"))}' + (
+        f'&return={return_flight.pk}' if return_flight else ''
+    )
 
     def fail(msg):
         messages.error(request, msg)
@@ -140,6 +152,8 @@ def book(request, pk):
         return fail('აირჩიე მინიმუმ ერთი ადგილი')
     if len(seats) > MAX_PASSENGERS or len(set(seats)) != len(seats):
         return fail(f'ერთ ჯავშანზე მაქსიმუმ {MAX_PASSENGERS} მგზავრია')
+    if not set(seats + return_seats) <= Flight.all_seats():
+        return fail('ასეთი ადგილი თვითმფრინავში არ არსებობს')
 
     cabins = {flight.cabin_of(s) for s in seats}
     if return_flight:

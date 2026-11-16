@@ -1,13 +1,36 @@
-<div class="seat-map" data-leg="{{ leg }}" data-economy="{{ f.economy_price }}" data-business="{{ f.business_price }}">
-  {% for row, is_business, seats in map %}
-    <div class="seat-row{% if is_business %} business{% endif %}">
-      <span class="row-num">{{ row }}</span>
-      {% for seat, taken in seats %}
-        {% if forloop.counter == 4 %}<span class="aisle"></span>{% endif %}
-        <button type="button" class="seat{% if taken %} taken{% endif %}"
-                data-seat="{{ seat }}" data-cabin="{% if is_business %}business{% else %}economy{% endif %}"
-                {% if taken %}disabled{% endif %}>{{ seat|slice:"-1:" }}</button>
-      {% endfor %}
+{# თვითმფრინავის 2D სქემა: ცხვირი → ბიზნესი → სამზარეულო → ეკონომი (ფრთებით) → კუდი #}
+<div class="plane-wrap">
+  <div class="plane" data-leg="{{ leg }}" data-economy="{{ f.economy_price }}" data-business="{{ f.business_price }}">
+    <div class="plane-nose">
+      <div class="cockpit"><i></i><i></i><i></i></div>
+      <small>{{ f.airline.name }}</small>
     </div>
-  {% endfor %}
+
+    <div class="plane-body">
+      <div class="wing wing-left"></div>
+      <div class="wing wing-right"></div>
+      <div class="engine engine-left"></div>
+      <div class="engine engine-right"></div>
+
+      <div class="cabin-section" data-section="business">
+        <div class="cabin-label">🥂 ბიზნეს კლასი · {{ f.business_price|floatformat:0 }} ₾</div>
+        {% for row in map.business %}
+          {% include 'partials/seat_row.html' with cabin='business' %}
+        {% endfor %}
+      </div>
+
+      <div class="galley"><span>🍽 სამზარეულო</span><span>🚻</span></div>
+
+      <div class="cabin-section" data-section="economy">
+        <div class="cabin-label">💺 ეკონომ კლასი · {{ f.economy_price|floatformat:0 }} ₾</div>
+        {% for row in map.economy %}
+          {% include 'partials/seat_row.html' with cabin='economy' %}
+        {% endfor %}
+      </div>
+
+      <div class="galley"><span>🚻</span><span>🍽</span></div>
+    </div>
+
+    <div class="plane-tail"></div>
+  </div>
 </div>

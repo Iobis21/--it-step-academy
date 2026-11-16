@@ -19,7 +19,9 @@
     </div>
     <div class="footer">
       <span>{{ flight.departure_time|date:"d.m.Y" }}</span>
-      <span class="price">{{ flight.economy_price|floatformat:0 }} ₾</span>
+      <span class="price">
+        {% if cabin == 'business' %}<small class="cabin-tag">ბიზნესი</small> {{ flight.business_price|floatformat:0 }}{% else %}{{ flight.economy_price|floatformat:0 }}{% endif %} ₾
+      </span>
     </div>
   </div>
 </a>

@@ -42,9 +42,13 @@ class Airline(models.Model):
 
 
 class Flight(models.Model):
-    ROWS = 10
-    SEAT_LETTERS = 'ABCDEF'
-    BUSINESS_ROWS = 2
+    # სალონის განლაგება: ბიზნესი 2+2 (A C | D F), ეკონომი 3+3 (A B C | D E F)
+    BUSINESS_ROWS = 3
+    ECONOMY_ROWS = 12
+    ROWS = BUSINESS_ROWS + ECONOMY_ROWS
+    BUSINESS_LAYOUT = ('AC', 'DF')
+    ECONOMY_LAYOUT = ('ABC', 'DEF')
+    EXIT_ROWS = (BUSINESS_ROWS + 6,)  # საავარიო გასასვლელის რიგი (ფრთებთან)
 
     flight_number = models.CharField('ფრენის ნომერი', max_length=10)
     airline = models.ForeignKey(Airline, on_delete=models.PROTECT, related_name='flights', verbose_name='ავიაკომპანია')
@@ -83,9 +87,22 @@ class Flight(models.Model):
             return f'{m}წთ'
         return f'{h}სთ {m}წთ' if m else f'{h}სთ'
 
+    @classmethod
+    def layout_for_row(cls, row):
+        return cls.BUSINESS_LAYOUT if row <= cls.BUSINESS_ROWS else cls.ECONOMY_LAYOUT
+
+    @classmethod
+    def all_seats(cls):
+        return {
+            f'{r}{l}'
+            for r in range(1, cls.ROWS + 1)
+            for side in cls.layout_for_row(r)
+            for l in side
+        }
+
     @property
     def seats_total(self):
-        return self.ROWS * len(self.SEAT_LETTERS)
+        return len(self.all_seats())
 
     def taken_seats(self):
         return set(
@@ -104,13 +121,23 @@ class Flight(models.Model):
         return self.business_price if cabin == Booking.Cabin.BUSINESS else self.economy_price
 
     def seat_map(self):
-        """აბრუნებს რიგების სიას: [(row, is_business, [(seat, taken), ...]), ...]"""
+        """სალონის სქემა თვითმფრინავის ნახატისთვის.
+
+        აბრუნებს: {'business': [row, ...], 'economy': [row, ...]}, სადაც
+        row = {'number', 'exit', 'left': [(seat, letter, taken)], 'right': [...]}
+        """
         taken = self.taken_seats()
-        rows = []
+        cabins = {'business': [], 'economy': []}
         for r in range(1, self.ROWS + 1):
-            seats = [(f'{r}{l}', f'{r}{l}' in taken) for l in self.SEAT_LETTERS]
-            rows.append((r, r <= self.BUSINESS_ROWS, seats))
-        return rows
+            left, right = self.layout_for_row(r)
+            row = {
+                'number': r,
+                'exit': r in self.EXIT_ROWS,
+                'left': [(f'{r}{l}', l, f'{r}{l}' in taken) for l in left],
+                'right': [(f'{r}{l}', l, f'{r}{l}' in taken) for l in right],
+            }
+            cabins['business' if r <= self.BUSINESS_ROWS else 'economy'].append(row)
+        return cabins
 
 
 class Booking(models.Model):

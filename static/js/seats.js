@@ -1,4 +1,4 @@
-// ადგილების არჩევა (ცალმხრივი და ორმხრივი ფრენისთვის) და მგზავრების ფორმები
+// კლასის არჩევა, ადგილების არჩევა თვითმფრინავის სქემაზე (ცალმხრივი/ორმხრივი) და მგზავრების ფორმები
 (function () {
   const form = document.getElementById('booking-form');
   if (!form) return;
@@ -8,23 +8,36 @@
   const totalEl = document.getElementById('total');
   const errorEl = document.getElementById('seat-error');
   const bookBtn = document.getElementById('book-btn');
+  const cabinRadios = form.querySelectorAll('input[name="cabin"]');
 
   // leg: 'out' — წასვლა, 'ret' — დაბრუნება
   const legs = {};
-  form.querySelectorAll('.seat-map').forEach(map => {
-    legs[map.dataset.leg] = {
-      prices: { economy: Number(map.dataset.economy), business: Number(map.dataset.business) },
-      selected: new Map(), // seat -> cabin
+  form.querySelectorAll('.plane').forEach(plane => {
+    legs[plane.dataset.leg] = {
+      plane,
+      prices: { economy: Number(plane.dataset.economy), business: Number(plane.dataset.business) },
+      selected: [], // არჩეული ადგილები თანმიმდევრობით
     };
   });
   const hasReturn = 'ret' in legs;
 
-  function cabinInUse() {
+  const currentCabin = () => form.querySelector('input[name="cabin"]:checked')?.value || 'economy';
+
+  function applyCabin() {
+    const cabin = currentCabin();
     for (const leg of Object.values(legs)) {
-      const first = leg.selected.values().next().value;
-      if (first) return first;
+      leg.selected = [];
+      leg.plane.querySelectorAll('.seat[data-seat]').forEach(btn => {
+        btn.classList.remove('selected');
+        const off = btn.dataset.cabin !== cabin;
+        btn.classList.toggle('off', off);
+        btn.disabled = off || btn.classList.contains('taken');
+      });
+      leg.plane.querySelectorAll('.cabin-section').forEach(sec =>
+        sec.classList.toggle('active', sec.dataset.section === cabin));
     }
-    return null;
+    errorEl.textContent = '';
+    render();
   }
 
   function render() {
@@ -32,9 +45,9 @@
     list.querySelectorAll('input').forEach(i => (saved[i.name] = i.value));
     list.innerHTML = '';
 
-    const outSeats = [...legs.out.selected.keys()];
-    const retSeats = hasReturn ? [...legs.ret.selected.keys()] : [];
-    if (!outSeats.length) list.innerHTML = '<p class="muted">აირჩიე ადგილი სქემაზე</p>';
+    const outSeats = legs.out.selected;
+    const retSeats = hasReturn ? legs.ret.selected : [];
+    if (!outSeats.length) list.innerHTML = '<p class="muted">აირჩიე ადგილი თვითმფრინავის სქემაზე</p>';
 
     outSeats.forEach((seat, i) => {
       const retSeat = retSeats[i];
@@ -51,56 +64,54 @@
       list.appendChild(fs);
     });
 
+    const cabin = currentCabin();
     let total = 0;
-    for (const leg of Object.values(legs)) leg.selected.forEach(cabin => (total += leg.prices[cabin]));
+    for (const leg of Object.values(legs)) total += leg.selected.length * leg.prices[cabin];
     totalEl.textContent = total + ' ₾';
 
     let ready = outSeats.length > 0;
-    if (hasReturn && retSeats.length !== outSeats.length) {
+    if (hasReturn && outSeats.length && retSeats.length !== outSeats.length) {
       ready = false;
-      if (outSeats.length) errorEl.textContent = `დაბრუნებისთვის აირჩიე ${outSeats.length} ადგილი (არჩეულია ${retSeats.length})`;
-    } else if (errorEl.dataset.soft) {
+      errorEl.textContent = `დაბრუნებისთვის აირჩიე ${outSeats.length} ადგილი (არჩეულია ${retSeats.length})`;
+    } else if (errorEl.dataset.kind === 'count') {
       errorEl.textContent = '';
     }
-    errorEl.dataset.soft = '1';
+    errorEl.dataset.kind = hasReturn && !ready && outSeats.length ? 'count' : '';
     if (bookBtn) bookBtn.disabled = !ready;
   }
 
-  form.querySelectorAll('.seat-map').forEach(map => {
-    const leg = legs[map.dataset.leg];
-    map.querySelectorAll('.seat[data-seat]').forEach(btn => {
+  Object.entries(legs).forEach(([name, leg]) => {
+    leg.plane.querySelectorAll('.seat[data-seat]').forEach(btn => {
       btn.addEventListener('click', () => {
         errorEl.textContent = '';
-        const { seat, cabin } = btn.dataset;
-        if (leg.selected.has(seat)) {
-          leg.selected.delete(seat);
+        const seat = btn.dataset.seat;
+        const idx = leg.selected.indexOf(seat);
+        if (idx >= 0) {
+          leg.selected.splice(idx, 1);
           btn.classList.remove('selected');
         } else {
-          const current = cabinInUse();
-          if (current && current !== cabin) {
-            errorEl.textContent = 'ყველა ადგილი ერთი კლასიდან უნდა იყოს';
-            return;
-          }
-          const limit = map.dataset.leg === 'ret' ? legs.out.selected.size : max;
-          if (leg.selected.size >= limit) {
-            errorEl.textContent = map.dataset.leg === 'ret'
-              ? 'დაბრუნებისთვის იმდენივე ადგილი აირჩიე, რამდენი მგზავრიცაა'
+          const limit = name === 'ret' ? legs.out.selected.length : max;
+          if (leg.selected.length >= limit) {
+            errorEl.textContent = name === 'ret'
+              ? (limit ? 'დაბრუნებისთვის იმდენივე ადგილი აირჩიე, რამდენი მგზავრიცაა' : 'ჯერ წასვლის ადგილები აირჩიე')
               : `ერთ ჯავშანზე მაქსიმუმ ${max} მგზავრია`;
             return;
           }
-          leg.selected.set(seat, cabin);
+          leg.selected.push(seat);
           btn.classList.add('selected');
         }
         // წასვლის ადგილის მოხსნისას ზედმეტი დაბრუნების ადგილებიც მოიხსნება
         if (hasReturn) {
-          while (legs.ret.selected.size > legs.out.selected.size) {
-            const last = [...legs.ret.selected.keys()].pop();
-            legs.ret.selected.delete(last);
-            form.querySelector(`.seat-map[data-leg="ret"] [data-seat="${last}"]`).classList.remove('selected');
+          while (legs.ret.selected.length > legs.out.selected.length) {
+            const last = legs.ret.selected.pop();
+            legs.ret.plane.querySelector(`[data-seat="${last}"]`).classList.remove('selected');
           }
         }
         render();
       });
     });
   });
+
+  cabinRadios.forEach(r => r.addEventListener('change', applyCabin));
+  applyCabin();
 })();

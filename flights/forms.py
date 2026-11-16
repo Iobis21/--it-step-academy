@@ -23,8 +23,12 @@ class FlightSearchForm(forms.Form):
         ('-economy_price', 'ფასით (ძვირი → იაფი)'),
     ]
 
+    CABIN_CHOICES = [('economy', 'ეკონომ კლასი'), ('business', 'ბიზნეს კლასი')]
+
     trip_type = forms.ChoiceField(choices=TRIP_CHOICES, required=False, initial=ONE_WAY,
                                   widget=forms.RadioSelect, label='მგზავრობის ტიპი')
+    cabin = forms.ChoiceField(choices=CABIN_CHOICES, required=False, initial='economy',
+                              widget=forms.RadioSelect, label='კლასი')
     origin = forms.ModelChoiceField(City.objects.all(), required=False, label='საიდან', empty_label='საიდან')
     destination = forms.ModelChoiceField(City.objects.all(), required=False, label='სად', empty_label='სად')
     date = forms.DateField(required=False, label='გაფრენის თარიღი', widget=forms.DateInput(attrs={'type': 'date'}))

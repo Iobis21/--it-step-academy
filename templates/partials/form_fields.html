@@ -2,7 +2,7 @@
   <div class="alert alert-error">{{ form.non_field_errors|join:" " }}</div>
 {% endif %}
 {% for field in form %}
-  {% if field.name != 'trip_type' %}
+  {% if field.name != 'trip_type' and field.name != 'cabin' %}
     <label class="{% if field.field.widget.input_type == 'checkbox' %}check{% endif %}"{% if field.name == 'return_date' %} data-return-field{% endif %}>
       {{ field.label }}
       {{ field }}

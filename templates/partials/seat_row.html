@@ -1,0 +1,15 @@
+<div class="seat-row {{ cabin }}{% if row.exit %} exit-row{% endif %}">
+  <div class="seat-group">
+    {% for seat, letter, taken in row.left %}
+      <button type="button" class="seat{% if taken %} taken{% endif %}" data-seat="{{ seat }}" data-cabin="{{ cabin }}"
+              title="{{ seat }}{% if taken %} — დაკავებულია{% endif %}" {% if taken %}disabled{% endif %}>{{ letter }}</button>
+    {% endfor %}
+  </div>
+  <span class="row-num">{{ row.number }}</span>
+  <div class="seat-group">
+    {% for seat, letter, taken in row.right %}
+      <button type="button" class="seat{% if taken %} taken{% endif %}" data-seat="{{ seat }}" data-cabin="{{ cabin }}"
+              title="{{ seat }}{% if taken %} — დაკავებულია{% endif %}" {% if taken %}disabled{% endif %}>{{ letter }}</button>
+    {% endfor %}
+  </div>
+</div>

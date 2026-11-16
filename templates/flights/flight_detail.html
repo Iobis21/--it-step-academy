@@ -45,6 +45,28 @@
   {% csrf_token %}
   {% if return_flight %}<input type="hidden" name="return_flight" value="{{ return_flight.pk }}">{% endif %}
   <div class="legs">
+    <section class="card cabin-picker">
+      <h3>აირჩიე კლასი</h3>
+      <div class="cabin-options">
+        <label class="cabin-option">
+          <input type="radio" name="cabin" value="economy" {% if cabin != 'business' %}checked{% endif %}>
+          <span>
+            <b>💺 ეკონომ კლასი</b>
+            <small>სტანდარტული ადგილი · ხელბარგი 8 კგ · 3+3 განლაგება</small>
+            <em>{% if return_flight %}{{ flight.economy_price|add:return_flight.economy_price|floatformat:0 }}{% else %}{{ flight.economy_price|floatformat:0 }}{% endif %} ₾ <small>/ მგზავრი</small></em>
+          </span>
+        </label>
+        <label class="cabin-option">
+          <input type="radio" name="cabin" value="business" {% if cabin == 'business' %}checked{% endif %}>
+          <span>
+            <b>🥂 ბიზნეს კლასი</b>
+            <small>ფართო სავარძელი · 2×32 კგ ბარგი · ლაუნჯი · კვება</small>
+            <em>{% if return_flight %}{{ flight.business_price|add:return_flight.business_price|floatformat:0 }}{% else %}{{ flight.business_price|floatformat:0 }}{% endif %} ₾ <small>/ მგზავრი</small></em>
+          </span>
+        </label>
+      </div>
+    </section>
+
     <section class="card">
       <h3>{% if return_flight %}✈ წასვლა: {% endif %}{{ flight.origin.name }} → {{ flight.destination.name }}</h3>
       <ul class="info">
@@ -57,7 +79,7 @@
         <li><span>ეკონომი / ბიზნესი</span><b>{{ flight.economy_price|floatformat:0 }} ₾ / {{ flight.business_price|floatformat:0 }} ₾</b></li>
       </ul>
       <h3>აირჩიე ადგილი</h3>
-      <p class="muted">პირველი 2 რიგი — ბიზნეს კლასი. ყველა ადგილი ერთი კლასიდან უნდა იყოს.</p>
+      <p class="muted">დააჭირე თავისუფალ სავარძელს თვითმფრინავის სქემაზე. ხელმისაწვდომია არჩეული კლასის ადგილები.</p>
       {% include 'partials/seat_map.html' with leg='out' f=flight map=seat_map %}
     </section>
 
@@ -74,7 +96,7 @@
         <h3>აირჩიე ადგილი დაბრუნებისთვის</h3>
         <p class="muted">იმდენივე ადგილი აირჩიე, რამდენიც წასვლისთვის.</p>
         {% include 'partials/seat_map.html' with leg='ret' f=return_flight map=return_seat_map %}
-        <p><a href="{% url 'flight_detail' flight.pk %}?return_date={{ return_flight.departure_time|date:'Y-m-d' }}">სხვა დაბრუნების ფრენის არჩევა</a></p>
+        <p><a href="{% url 'flight_detail' flight.pk %}?cabin={{ cabin }}&return_date={{ return_flight.departure_time|date:'Y-m-d' }}">სხვა დაბრუნების ფრენის არჩევა</a></p>
       </section>
     {% endif %}
 
@@ -82,6 +104,8 @@
       <span><i class="seat"></i> თავისუფალი</span>
       <span><i class="seat selected"></i> არჩეული</span>
       <span><i class="seat taken"></i> დაკავებული</span>
+      <span><i class="seat off"></i> სხვა კლასი</span>
+      <span><i class="seat exit-mark"></i> საავარიო გასასვლელი</span>
     </div>
   </div>
 
