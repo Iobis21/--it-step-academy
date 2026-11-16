@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}ბილეთი {{ booking.pnr }}{% endblock %}
+{% block content %}
+<div class="ticket-head">
+  <div>
+    <h1>ჩემი ბილეთი</h1>
+    <p class="muted">ჯავშნის კოდი: <b class="pnr">{{ booking.pnr }}</b> ·
+      {% if booking.is_round_trip %}ორმხრივი{% else %}ცალმხრივი{% endif %} ·
+      {{ booking.get_cabin_display }} · {{ booking.total_price|floatformat:0 }} ₾</p>
+  </div>
+  <div class="ticket-actions">
+    {% if booking.status == 'cancelled' %}
+      <span class="badge">გაუქმებულია</span>
+    {% elif booking.is_checked_in %}
+      <span class="badge badge-ok">✓ რეგისტრაცია გავლილია</span>
+      <button class="btn btn-outline" onclick="window.print()">🖨 ბეჭდვა</button>
+    {% elif booking.can_check_in %}
+      <form method="post" action="{% url 'do_checkin' booking.pnr %}">
+        {% csrf_token %}
+        <button class="btn">რეგისტრაციის გავლა</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+{% for flight, passengers in legs %}
+  {% if booking.is_round_trip %}
+    <h3 class="leg-title">{% if forloop.first %}✈ წასვლა{% else %}↩ დაბრუნება{% endif %}</h3>
+  {% endif %}
+  {% for p in passengers %}
+    <div class="boarding-pass{% if booking.status == 'cancelled' %} cancelled{% endif %}">
+      <div class="bp-main">
+        <div class="bp-top">
+          <span class="logo">✈ SkyBook</span>
+          <span>{{ flight.airline.name }} · <b>{{ flight.flight_number }}</b></span>
+        </div>
+        <div class="bp-route">
+          <div>
+            <span class="code">{{ flight.origin.airport_code }}</span>
+            <span>{{ flight.origin.name }}</span>
+            <b>{{ flight.departure_time|date:"H:i" }}</b>
+          </div>
+          <div class="bp-plane">✈</div>
+          <div>
+            <span class="code">{{ flight.destination.airport_code }}</span>
+            <span>{{ flight.destination.name }}</span>
+            <b>{{ flight.arrival_time|date:"H:i" }}</b>
+          </div>
+        </div>
+        <div class="bp-grid">
+          <div><small>მგზავრი</small><b>{{ p.last_name|upper }} {{ p.first_name|upper }}</b></div>
+          <div><small>თარიღი</small><b>{{ flight.departure_time|date:"d.m.Y" }}</b></div>
+          <div><small>ადგილი</small><b>{{ p.seat }}</b></div>
+          <div><small>კლასი</small><b>{{ booking.get_cabin_display }}</b></div>
+          <div><small>ჩასხდომა</small><b>{{ flight.departure_time|date:"H:i" }} -40წთ</b></div>
+          <div><small>სტატუსი</small><b>{% if p.checked_in %}რეგისტრირებული{% else %}რეგისტრაცია არ გაუვლია{% endif %}</b></div>
+        </div>
+      </div>
+      <div class="bp-stub">
+        <small>ჯავშანი</small>
+        <b class="pnr">{{ booking.pnr }}</b>
+        <small>ადგილი</small>
+        <b>{{ p.seat }}</b>
+        <div class="barcode" aria-hidden="true"></div>
+      </div>
+    </div>
+  {% endfor %}
+{% endfor %}
+
+<p><a href="{% if user.is_authenticated %}{% url 'profile' %}{% else %}{% url 'checkin' %}{% endif %}">← უკან</a></p>
+{% endblock %}

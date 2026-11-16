@@ -5,7 +5,7 @@
   <div class="avatar">{{ user.first_name|slice:":1" }}{{ user.last_name|slice:":1" }}</div>
   <div>
     <h1>{{ user.first_name }} {{ user.last_name }}</h1>
-    <p class="muted">{{ user.email }} · {{ user.phone }}</p>
+    <p class="muted">✉ {{ user.email }} · 📱 {{ user.phone }}{% if user.personal_id %} · 🪪 {{ user.personal_id }}{% endif %}</p>
   </div>
 </section>
 
@@ -14,7 +14,9 @@
   <div class="card booking{% if b.status == 'cancelled' %} cancelled{% endif %}">
     <div>
       <h3><a href="{% url 'flight_detail' b.flight.pk %}">{{ b.flight.origin.name }} {% if b.is_round_trip %}⇄{% else %}→{% endif %} {{ b.flight.destination.name }}</a></h3>
-      <p>{% if b.is_round_trip %}ორმხრივი{% else %}ცალმხრივი{% endif %} · {{ b.get_cabin_display }} · ჯავშანი #{{ b.pk }}</p>
+      <p>{% if b.is_round_trip %}ორმხრივი{% else %}ცალმხრივი{% endif %} · {{ b.get_cabin_display }} ·
+        ჯავშნის კოდი <b class="pnr">{{ b.pnr }}</b>
+        {% if b.is_checked_in %}<span class="badge badge-ok">✓ რეგისტრირებული</span>{% endif %}</p>
       <p class="muted">{% if b.is_round_trip %}✈ წასვლა: {% endif %}{{ b.flight.airline.name }} · {{ b.flight.flight_number }} · {{ b.flight.departure_time|date:"d.m.Y H:i" }}</p>
       {% if b.is_round_trip %}
         <p class="muted">↩ დაბრუნება: {{ b.return_flight.airline.name }} · {{ b.return_flight.flight_number }} · {{ b.return_flight.departure_time|date:"d.m.Y H:i" }}</p>
@@ -28,6 +30,7 @@
     </div>
     <div class="booking-side">
       <b>{{ b.total_price|floatformat:0 }} ₾</b>
+      <a class="btn" href="{% url 'ticket' b.pnr %}">🎫 ბილეთი{% if b.can_check_in and not b.is_checked_in %} / რეგისტრაცია{% endif %}</a>
       {% if b.status == 'active' %}
         <form method="post" action="{% url 'cancel_booking' b.pk %}" onsubmit="return confirm('ნამდვილად გსურს ჯავშნის გაუქმება?')">
           {% csrf_token %}

@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .forms import FlightSearchForm
+from .forms import CheckInForm, FlightSearchForm
 from .models import Booking, Favorite, Flight, Passenger
 
 MAX_PASSENGERS = 6
@@ -179,8 +179,70 @@ def book(request, pk):
             ]
         Passenger.objects.bulk_create(rows)
 
-    messages.success(request, f'ჯავშანი #{booking.pk} წარმატებით შეიქმნა!')
-    return redirect('profile')
+    messages.success(request, f'ჯავშანი წარმატებით შეიქმნა! ჯავშნის კოდი: {booking.pnr}')
+    _allow_ticket(request, booking)
+    return redirect('ticket', pnr=booking.pnr)
+
+
+# ===== ონლაინ რეგისტრაცია (check-in) და ბილეთის ნახვა =====
+
+def _allow_ticket(request, booking):
+    allowed = set(request.session.get('tickets', []))
+    allowed.add(booking.pnr)
+    request.session['tickets'] = sorted(allowed)
+
+
+def _ticket_booking(request, pnr):
+    """ბილეთის ნახვა შეუძლია მფლობელს ან მას, ვინც კოდი + გვარი სწორად შეიყვანა."""
+    booking = get_object_or_404(
+        Booking.objects.select_related(
+            'user', 'flight__airline', 'flight__origin', 'flight__destination',
+            'return_flight__airline', 'return_flight__origin', 'return_flight__destination',
+        ).prefetch_related('passengers'),
+        pnr=pnr,
+    )
+    is_owner = request.user.is_authenticated and booking.user_id == request.user.id
+    if not (is_owner or pnr in request.session.get('tickets', [])):
+        return None
+    return booking
+
+
+def checkin(request):
+    form = CheckInForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        booking = Booking.objects.filter(
+            pnr=form.cleaned_data['pnr'],
+            passengers__last_name__iexact=form.cleaned_data['last_name'].strip(),
+        ).first()
+        if booking:
+            _allow_ticket(request, booking)
+            return redirect('ticket', pnr=booking.pnr)
+        form.add_error(None, 'ჯავშანი ვერ მოიძებნა. შეამოწმე ჯავშნის კოდი და გვარი.')
+    return render(request, 'flights/checkin.html', {'form': form})
+
+
+def ticket(request, pnr):
+    booking = _ticket_booking(request, pnr)
+    if booking is None:
+        messages.error(request, 'ბილეთის სანახავად შეიყვანე ჯავშნის კოდი და გვარი')
+        return redirect('checkin')
+    legs = [(booking.flight, booking.outbound_passengers())]
+    if booking.return_flight:
+        legs.append((booking.return_flight, booking.return_passengers()))
+    return render(request, 'flights/ticket.html', {'booking': booking, 'legs': legs})
+
+
+@require_POST
+def do_checkin(request, pnr):
+    booking = _ticket_booking(request, pnr)
+    if booking is None:
+        return redirect('checkin')
+    if not booking.can_check_in:
+        messages.error(request, 'ამ ჯავშანზე რეგისტრაცია შეუძლებელია (გაუქმებულია ან ფრენა შესრულდა)')
+    else:
+        booking.passengers.update(checked_in=True)
+        messages.success(request, 'რეგისტრაცია გავლილია! ჩასხდომის ბილეთი მზადაა ✈')
+    return redirect('ticket', pnr=pnr)
 
 
 @login_required

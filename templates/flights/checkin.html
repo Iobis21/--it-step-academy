@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}ონლაინ რეგისტრაცია{% endblock %}
+{% block content %}
+<div class="card auth-card">
+  <h1>🎫 ონლაინ რეგისტრაცია</h1>
+  <p class="muted">შეიყვანე ჯავშნის კოდი და მგზავრის გვარი — გამოჩნდება შენი ნაყიდი ბილეთი და შეძლებ ფრენაზე რეგისტრაციის გავლას.</p>
+  <form method="post">
+    {% csrf_token %}
+    {% include 'partials/form_fields.html' %}
+    <button class="btn btn-block" type="submit">ბილეთის ნახვა</button>
+  </form>
+  <p class="muted small">ჯავშნის კოდი 6 სიმბოლოსგან შედგება და ჩანს დაჯავშნის შემდეგ, ასევე პროფილის გვერდზე.</p>
+</div>
+{% endblock %}

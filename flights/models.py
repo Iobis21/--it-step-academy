@@ -1,5 +1,17 @@
+import secrets
+
 from django.conf import settings
 from django.db import models
+
+# ჯავშნის კოდი — 6 სიმბოლო, დამაბნეველი სიმბოლოების (0/O, 1/I) გარეშე
+PNR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+
+def generate_pnr(model):
+    while True:
+        code = ''.join(secrets.choice(PNR_ALPHABET) for _ in range(6))
+        if not model.objects.filter(pnr=code).exists():
+            return code
 
 
 class City(models.Model):
@@ -111,6 +123,7 @@ class Booking(models.Model):
         CANCELLED = 'cancelled', 'გაუქმებული'
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings')
+    pnr = models.CharField('ჯავშნის კოდი', max_length=6, unique=True, null=True, blank=True)
     flight = models.ForeignKey(Flight, on_delete=models.PROTECT, related_name='bookings')
     return_flight = models.ForeignKey(
         Flight, on_delete=models.PROTECT, related_name='return_bookings',
@@ -127,7 +140,21 @@ class Booking(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'#{self.pk} {self.user} — {self.flight}'
+        return f'{self.pnr or self.pk} {self.user} — {self.flight}'
+
+    def save(self, *args, **kwargs):
+        if not self.pnr:
+            self.pnr = generate_pnr(Booking)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_checked_in(self):
+        return all(p.checked_in for p in self.passengers.all())
+
+    @property
+    def can_check_in(self):
+        from django.utils import timezone
+        return self.status == self.Status.ACTIVE and self.flight.departure_time > timezone.now()
 
     @property
     def is_round_trip(self):
@@ -147,6 +174,7 @@ class Passenger(models.Model):
     last_name = models.CharField('გვარი', max_length=50)
     passport = models.CharField('პასპორტი / პირადი ნომერი', max_length=20)
     seat = models.CharField('ადგილი', max_length=4)
+    checked_in = models.BooleanField('რეგისტრაცია გავლილია', default=False)
 
     class Meta:
         verbose_name = 'მგზავრი'

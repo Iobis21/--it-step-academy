@@ -14,6 +14,14 @@ class User(AbstractUser):
         validators=[RegexValidator(r'^5\d{8}$', 'ნომერი უნდა იყოს 9 ციფრი და იწყებოდეს 5-ით')],
     )
 
+    personal_id = models.CharField(
+        'პირადი ნომერი',
+        max_length=11,
+        unique=True,
+        null=True,
+        validators=[RegexValidator(r'^\d{11}$', 'პირადი ნომერი უნდა შედგებოდეს 11 ციფრისგან')],
+    )
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'phone']
 

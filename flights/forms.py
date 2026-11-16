@@ -3,6 +3,15 @@ from django import forms
 from .models import Airline, City
 
 
+class CheckInForm(forms.Form):
+    pnr = forms.CharField(label='ჯავშნის კოდი', max_length=6, min_length=6,
+                          widget=forms.TextInput(attrs={'placeholder': 'მაგ. K7XQ2M', 'autocomplete': 'off'}))
+    last_name = forms.CharField(label='მგზავრის გვარი', max_length=50)
+
+    def clean_pnr(self):
+        return self.cleaned_data['pnr'].strip().upper()
+
+
 class FlightSearchForm(forms.Form):
     ONE_WAY = 'oneway'
     RETURN = 'return'

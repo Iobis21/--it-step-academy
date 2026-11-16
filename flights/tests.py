@@ -33,7 +33,8 @@ class BookingFlowTests(TestCase):
 
     def test_register_and_login(self):
         r = self.client.post(reverse('register'), {
-            'first_name': 'გიო', 'last_name': 'ტესტი', 'phone': '599123456', 'email': 'a@a.ge',
+            'first_name': 'გიო', 'last_name': 'ტესტი', 'personal_id': '01001012345',
+            'phone': '599123456', 'email': 'a@a.ge',
             'password1': 'Skybook!2026', 'password2': 'Skybook!2026',
         })
         self.assertRedirects(r, reverse('home'))
@@ -117,6 +118,36 @@ class BookingFlowTests(TestCase):
             data.update({f'first_name_{s}': 'ა', f'last_name_{s}': 'ბ', f'passport_{s}': '01001'})
         self.client.post(reverse('book', args=[self.flight.pk]), data)
         self.assertEqual(Booking.objects.count(), 0)
+
+    def test_register_requires_valid_personal_id(self):
+        r = self.client.post(reverse('register'), {
+            'first_name': 'გიო', 'last_name': 'ტესტი', 'personal_id': '123',
+            'phone': '599123456', 'email': 'b@b.ge',
+            'password1': 'Skybook!2026', 'password2': 'Skybook!2026',
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(User.objects.filter(email='b@b.ge').exists())
+
+    def test_ticket_after_booking_and_checkin(self):
+        self.login()
+        r = self.book(['3A'])
+        b = Booking.objects.get()
+        self.assertEqual(len(b.pnr), 6)
+        self.assertRedirects(r, reverse('ticket', args=[b.pnr]))
+        self.assertContains(self.client.get(reverse('ticket', args=[b.pnr])), b.pnr)
+        self.client.post(reverse('do_checkin', args=[b.pnr]))
+        self.assertTrue(b.passengers.get().checked_in)
+
+    def test_ticket_hidden_from_strangers(self):
+        self.login()
+        self.book(['3A'])
+        b = Booking.objects.get()
+        self.client.logout()
+        r = self.client.get(reverse('ticket', args=[b.pnr]))
+        self.assertRedirects(r, reverse('checkin'))
+        # კოდით + გვარით ხელმისაწვდომია
+        r = self.client.post(reverse('checkin'), {'pnr': b.pnr.lower(), 'last_name': 'ბ'})
+        self.assertRedirects(r, reverse('ticket', args=[b.pnr]))
 
     def test_cannot_cancel_others_booking(self):
         self.login()
