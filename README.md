@@ -47,6 +47,12 @@ python manage.py runserver
 python manage.py test
 ```
 
+## სურათები
+
+- ქალაქების ფოტოები — [Unsplash](https://unsplash.com)
+- ბათუმი — [Batumi from the hill](https://commons.wikimedia.org/wiki/File:Batumi_from_the_hill.jpg), Wikimedia Commons
+- ქუთაისი — [Bagrati Cathedral](https://commons.wikimedia.org/wiki/File:2014_Kutaisi,_Katedra_Bagrati_(04).jpg), Wikimedia Commons
+
 ## სტრუქტურა
 
 ```
