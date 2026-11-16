@@ -59,6 +59,8 @@ class Flight(models.Model):
     @property
     def duration_display(self):
         h, m = divmod(self.duration_minutes, 60)
+        if not h:
+            return f'{m}წთ'
         return f'{h}სთ {m}წთ' if m else f'{h}სთ'
 
     @property
