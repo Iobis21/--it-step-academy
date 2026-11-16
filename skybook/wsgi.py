@@ -30,8 +30,9 @@ if os.environ.get('VERCEL'):
     # თუ ამ ელ-ფოსტით მომხმარებელი უკვე არსებობს — მას ადმინის უფლებებს ვაძლევთ.
     from accounts.models import User
 
-    admin_email = os.environ.get('ADMIN_EMAIL')
-    admin_password = os.environ.get('ADMIN_PASSWORD')
+    # strip() — ზედმეტი სივრცეების/ხაზის ბოლოს მოსაშორებლად
+    admin_email = os.environ.get('ADMIN_EMAIL', '').strip().lower()
+    admin_password = os.environ.get('ADMIN_PASSWORD', '').strip()
     if admin_email and admin_password:
         admin = User.objects.filter(email=admin_email).first()
         if admin is None:
