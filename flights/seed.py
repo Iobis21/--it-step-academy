@@ -13,8 +13,8 @@ from django.utils import timezone
 # ქალაქი, აეროპორტის კოდი, სურათი, (განედი, გრძედი), საქართველოშია თუ არა
 CITIES = [
     ('თბილისი', 'TBS', 'https://images.unsplash.com/photo-1565008576549-57569a49371d?w=800', (41.67, 44.95), True),
-    ('ბათუმი', 'BUS', 'https://images.unsplash.com/photo-1597466765990-64ad1c35dafc?w=800', (41.61, 41.60), True),
-    ('ქუთაისი', 'KUT', 'https://images.unsplash.com/photo-1622037022824-0c71d511ef3c?w=800', (42.18, 42.48), True),
+    ('ბათუმი', 'BUS', 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Batumi_from_the_hill.jpg/960px-Batumi_from_the_hill.jpg', (41.61, 41.60), True),
+    ('ქუთაისი', 'KUT', 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f4/2014_Kutaisi%2C_Katedra_Bagrati_%2804%29.jpg/960px-2014_Kutaisi%2C_Katedra_Bagrati_%2804%29.jpg', (42.18, 42.48), True),
     ('სტამბოლი', 'IST', 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=800', (41.26, 28.74), False),
     ('პარიზი', 'CDG', 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800', (49.01, 2.55), False),
     ('ლონდონი', 'LHR', 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800', (51.47, -0.45), False),
