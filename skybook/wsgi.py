@@ -26,5 +26,17 @@ if os.environ.get('VERCEL'):
     if not Flight.objects.filter(departure_time__gt=timezone.now() + timedelta(days=14)).exists():
         call_command('seed_flights', verbosity=0)
 
+    # ადმინის ანგარიში Vercel-ის გარემოს ცვლადებიდან (ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_PHONE).
+    # იქმნება მხოლოდ ერთხელ — თუ ასეთი ელ-ფოსტით მომხმარებელი ჯერ არ არსებობს.
+    from accounts.models import User
+
+    admin_email = os.environ.get('ADMIN_EMAIL')
+    admin_password = os.environ.get('ADMIN_PASSWORD')
+    if admin_email and admin_password and not User.objects.filter(email=admin_email).exists():
+        User.objects.create_superuser(
+            username=admin_email, email=admin_email, password=admin_password,
+            phone=os.environ.get('ADMIN_PHONE', '500000000'), first_name='ადმინი',
+        )
+
 # Vercel-ის Python runtime ეძებს ცვლადს სახელით `app`
 app = application
