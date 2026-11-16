@@ -436,7 +436,7 @@ nav > a:not(.btn):hover { background: rgba(255, 255, 255, .14); color: #fff; }
 
 /* ფრენის ბარათი — აიწევა, მინა ნათდება, სურათი ნელა დიდდება */
 .flight-card { transition: transform .35s var(--ease), box-shadow .35s var(--ease), background .35s var(--ease); }
-.flight-card:hover { transform: translateY(-6px); background: rgba(255, 255, 255, .2); box-shadow: var(--glow); }
+.flight-card:hover { transform: translateY(-6px); box-shadow: 0 16px 40px rgba(8, 47, 90, .5), 0 0 30px rgba(56, 189, 248, .25); }
 .flight-card img { transition: transform .6s var(--ease); }
 .flight-card:hover img { transform: scale(1.04); }
 
@@ -452,6 +452,37 @@ nav > a:not(.btn):hover { background: rgba(255, 255, 255, .14); color: #fff; }
 input, select { transition: border-color .2s var(--ease), background .2s var(--ease), box-shadow .2s var(--ease); }
 input:hover, select:hover { border-color: rgba(186, 230, 253, .55); }
 input:focus, select:focus { box-shadow: 0 0 0 3px rgba(125, 211, 252, .3); }
+
+/* „სინათლე კურსორის ქვეშ“ (მაუსის კოორდინატებს hover.js აწვდის) */
+.spotlight { position: relative; isolation: isolate; }
+.spotlight::before, .spotlight::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  opacity: 0; transition: opacity .4s var(--ease);
+}
+/* რბილი სინათლე მინაზე */
+.spotlight > * { position: relative; z-index: 1; }
+.spotlight::before {
+  z-index: 0;
+  background: radial-gradient(300px circle at var(--mx, 50%) var(--my, 50%), rgba(186, 230, 253, .28), transparent 65%);
+}
+/* ანთებული ჩარჩო კურსორთან */
+.spotlight::after {
+  z-index: 3; padding: 2px;
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), #e0f2fe, rgba(56, 189, 248, .9) 30%, rgba(125, 211, 252, .2) 60%, transparent 80%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.spotlight:hover::before, .spotlight:hover::after { opacity: 1; }
+
+/* ღილაკზე სინათლის ზოლი გადაირბენს */
+.btn { position: relative; overflow: hidden; isolation: isolate; }
+.btn::after {
+  content: ''; position: absolute; top: 0; left: -80%; width: 55%; height: 100%; pointer-events: none;
+  background: linear-gradient(110deg, transparent, rgba(255, 255, 255, .5), transparent);
+  transform: skewX(-20deg); transition: left .7s var(--ease);
+}
+.btn:hover:not(:disabled)::after { left: 130%; }
 
 /* ადგილები */
 .seat:hover:not(:disabled) { transform: translateY(-2px); background: rgba(255, 255, 255, .32); box-shadow: 0 4px 10px rgba(8, 47, 90, .35); }
