@@ -1,14 +1,14 @@
 <ul class="bag-list">
-  <li class="yes">🎒 პირადი ნივთი / ზურგჩანთა <small>({{ personal_item_size }}, სავარძლის ქვეშ)</small></li>
+  <li class="yes">პირადი ნივთი / ზურგჩანთა <small>({{ personal_item_size }}, სავარძლის ქვეშ)</small></li>
   {% if bag.cabin_bags %}
-    <li class="yes">🧳 ხელბარგი: {{ bag.cabin_bags }} × {{ bag.cabin_kg }} კგ <small>(55×40×23 სმ)</small></li>
+    <li class="yes">ხელბარგი: {{ bag.cabin_bags }} × {{ bag.cabin_kg }} კგ <small>(55×40×23 სმ)</small></li>
   {% else %}
-    <li class="no">🧳 ხელბარგი არ შედის <small>(+{{ bag.extra_cabin_price }} ₾, {{ bag.cabin_kg }} კგ)</small></li>
+    <li class="no">ხელბარგი არ შედის <small>(+{{ bag.extra_cabin_price }} ₾, {{ bag.cabin_kg }} კგ)</small></li>
   {% endif %}
   {% if bag.checked_bags %}
-    <li class="yes">🛄 ჩაბარებული ჩემოდანი: {{ bag.checked_bags }} × {{ bag.checked_kg }} კგ</li>
+    <li class="yes">ჩაბარებული ჩემოდანი: {{ bag.checked_bags }} × {{ bag.checked_kg }} კგ</li>
   {% else %}
-    <li class="no">🛄 ჩაბარებული ჩემოდანი არ შედის</li>
+    <li class="no">ჩაბარებული ჩემოდანი არ შედის</li>
   {% endif %}
-  <li class="extra">➕ დამატებითი ჩემოდანი {{ bag.checked_kg }} კგ — {{ bag.extra_checked_price }} ₾</li>
+  <li class="extra">დამატებითი ჩემოდანი {{ bag.checked_kg }} კგ — {{ bag.extra_checked_price }} ₾</li>
 </ul>

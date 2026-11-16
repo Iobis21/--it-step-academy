@@ -86,9 +86,9 @@
           ${bp.xcabin ? `
           <label class="check">
             <input type="checkbox" name="cabin_bag_${seat}" value="1" data-bag>
-            🧳 ხელბარგი ${bp.cabinKg} კგ <b>+${bp.xcabin} ₾</b>
+            ხელბარგი ${bp.cabinKg} კგ <b>+${bp.xcabin} ₾</b>
           </label>` : ''}
-          <label class="bag-select">🛄 დამატებითი ჩემოდანი ${bp.checkedKg} კგ
+          <label class="bag-select">დამატებითი ჩემოდანი ${bp.checkedKg} კგ
             <select name="checked_${seat}" data-bag>
               ${Array.from({ length: maxChecked + 1 }, (_, n) =>
                 `<option value="${n}">${n ? n + ' ც. (+' + n * bp.xchecked + ' ₾)' : 'არა'}</option>`).join('')}

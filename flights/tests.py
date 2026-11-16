@@ -261,7 +261,7 @@ class BookingFlowTests(TestCase):
         self.assertEqual(b.total_price, f.economy_price + 49 + 2 * 99)
         p = b.passengers.get()
         self.assertTrue(p.extra_cabin_bag)
-        self.assertIn('🛄 ჩემოდანი 2 × 20 კგ', p.baggage_lines())
+        self.assertIn('ჩემოდანი 2 × 20 კგ', p.baggage_lines())
 
     def test_full_service_includes_cabin_bag(self):
         f = self._flight_of(False)
@@ -270,7 +270,7 @@ class BookingFlowTests(TestCase):
         b = Booking.objects.get()
         self.assertEqual(b.baggage_price, 129)
         self.assertFalse(b.passengers.get().extra_cabin_bag)
-        self.assertIn('🛄 ჩემოდანი 2 × 23 კგ', b.passengers.get().baggage_lines())
+        self.assertIn('ჩემოდანი 2 × 23 კგ', b.passengers.get().baggage_lines())
 
     def test_too_many_extra_bags_rejected(self):
         self.login()

@@ -293,11 +293,11 @@ class Passenger(models.Model):
             cabin_bags = 1
         checked = bag['checked_bags'] + self.extra_checked_bags
 
-        lines = [f'🎒 პირადი ნივთი ({PERSONAL_ITEM_SIZE})']
+        lines = [f'პირადი ნივთი ({PERSONAL_ITEM_SIZE})']
         if cabin_bags > 0:
-            lines.append(f'🧳 ხელბარგი {cabin_bags} × {bag["cabin_kg"]} კგ')
+            lines.append(f'ხელბარგი {cabin_bags} × {bag["cabin_kg"]} კგ')
         if checked > 0:
-            lines.append(f'🛄 ჩემოდანი {checked} × {bag["checked_kg"]} კგ')
+            lines.append(f'ჩემოდანი {checked} × {bag["checked_kg"]} კგ')
         return lines
 
 
