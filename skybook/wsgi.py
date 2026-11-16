@@ -27,16 +27,23 @@ if os.environ.get('VERCEL'):
         call_command('seed_flights', verbosity=0)
 
     # ადმინის ანგარიში Vercel-ის გარემოს ცვლადებიდან (ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_PHONE).
-    # იქმნება მხოლოდ ერთხელ — თუ ასეთი ელ-ფოსტით მომხმარებელი ჯერ არ არსებობს.
+    # თუ ამ ელ-ფოსტით მომხმარებელი უკვე არსებობს — მას ადმინის უფლებებს ვაძლევთ.
     from accounts.models import User
 
     admin_email = os.environ.get('ADMIN_EMAIL')
     admin_password = os.environ.get('ADMIN_PASSWORD')
-    if admin_email and admin_password and not User.objects.filter(email=admin_email).exists():
-        User.objects.create_superuser(
-            username=admin_email, email=admin_email, password=admin_password,
-            phone=os.environ.get('ADMIN_PHONE', '500000000'), first_name='ადმინი',
-        )
+    if admin_email and admin_password:
+        admin = User.objects.filter(email=admin_email).first()
+        if admin is None:
+            User.objects.create_superuser(
+                username=admin_email, email=admin_email, password=admin_password,
+                phone=os.environ.get('ADMIN_PHONE', '500000000'), first_name='ადმინი',
+            )
+        elif not admin.is_superuser or not admin.check_password(admin_password):
+            admin.is_staff = True
+            admin.is_superuser = True
+            admin.set_password(admin_password)
+            admin.save()
 
 # Vercel-ის Python runtime ეძებს ცვლადს სახელით `app`
 app = application
