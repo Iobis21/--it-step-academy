@@ -128,20 +128,67 @@ class BookingFlowTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertFalse(User.objects.filter(email='b@b.ge').exists())
 
-    def test_ticket_after_booking_and_checkin(self):
+    CARD = {'card_name': 'GIO TESTI', 'card_number': '4242 4242 4242 4242', 'expiry': '12/39', 'cvv': '123'}
+
+    def pay(self, booking, **override):
+        return self.client.post(reverse('pay', args=[booking.pnr]), {**self.CARD, **override})
+
+    def test_ticket_after_booking_payment_and_checkin(self):
         self.login()
         r = self.book(['5A'])
         b = Booking.objects.get()
         self.assertEqual(len(b.pnr), 6)
+        self.assertEqual(b.status, 'pending')
+        self.assertRedirects(r, reverse('pay', args=[b.pnr]))
+        # გადახდამდე ბილეთი არ ჩანს — გადახდაზე გადაგვიყვანს
+        self.assertRedirects(self.client.get(reverse('ticket', args=[b.pnr])), reverse('pay', args=[b.pnr]))
+        r = self.pay(b)
         self.assertRedirects(r, reverse('ticket', args=[b.pnr]))
+        b.refresh_from_db()
+        self.assertEqual((b.status, b.card_last4), ('active', '4242'))
         self.assertContains(self.client.get(reverse('ticket', args=[b.pnr])), b.pnr)
         self.client.post(reverse('do_checkin', args=[b.pnr]))
         self.assertTrue(b.passengers.get().checked_in)
+
+    def test_invalid_card_rejected(self):
+        self.login()
+        self.book(['5A'])
+        b = Booking.objects.get()
+        r = self.pay(b, card_number='4242 4242 4242 4241')
+        self.assertContains(r, 'ბარათის ნომერი არასწორია')
+        r = self.pay(b, expiry='01/20')
+        self.assertContains(r, 'ვადა გაუვიდა')
+        b.refresh_from_db()
+        self.assertEqual(b.status, 'pending')
+
+    def test_unpaid_booking_expires_and_frees_seats(self):
+        self.login()
+        self.book(['5A'])
+        b = Booking.objects.get()
+        self.assertIn('5A', self.flight.taken_seats())
+        Booking.objects.filter(pk=b.pk).update(created_at=b.created_at - timedelta(minutes=16))
+        self.assertNotIn('5A', self.flight.taken_seats())
+        self.client.get(reverse('pay', args=[b.pnr]))
+        b.refresh_from_db()
+        self.assertEqual(b.status, 'cancelled')
+
+    def test_return_ticket_by_number(self):
+        self.login()
+        self.book(['5A'])
+        b = Booking.objects.get()
+        self.pay(b)
+        self.client.logout()
+        self.client.post(reverse('checkin'), {'pnr': b.pnr, 'last_name': 'ბ'})
+        self.client.post(reverse('cancel_ticket', args=[b.pnr]))
+        b.refresh_from_db()
+        self.assertEqual(b.status, 'cancelled')
+        self.assertNotIn('5A', self.flight.taken_seats())
 
     def test_ticket_hidden_from_strangers(self):
         self.login()
         self.book(['5A'])
         b = Booking.objects.get()
+        self.pay(b)
         self.client.logout()
         r = self.client.get(reverse('ticket', args=[b.pnr]))
         self.assertRedirects(r, reverse('checkin'))

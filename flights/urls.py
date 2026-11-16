@@ -13,4 +13,6 @@ urlpatterns = [
     path('checkin/', views.checkin, name='checkin'),
     path('ticket/<str:pnr>/', views.ticket, name='ticket'),
     path('ticket/<str:pnr>/checkin/', views.do_checkin, name='do_checkin'),
+    path('ticket/<str:pnr>/pay/', views.pay, name='pay'),
+    path('ticket/<str:pnr>/cancel/', views.cancel_ticket, name='cancel_ticket'),
 ]

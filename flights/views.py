@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .forms import CheckInForm, FlightSearchForm
+from .forms import CheckInForm, FlightSearchForm, PaymentForm
 from .models import Booking, Favorite, Flight, Passenger
 
 MAX_PASSENGERS = 6
@@ -199,7 +199,7 @@ def book(request, pk):
             return fail('დაბრუნების ფრენაზე არჩეული ადგილი უკვე დაკავებულია')
         booking = Booking.objects.create(
             user=request.user, flight=flight, return_flight=return_flight, cabin=cabin,
-            total_price=total, baggage_price=baggage_total,
+            total_price=total, baggage_price=baggage_total, status=Booking.Status.PENDING,
         )
 
         def make(leg, seat_list):
@@ -215,9 +215,37 @@ def book(request, pk):
             rows += make(return_flight, return_seats)
         Passenger.objects.bulk_create(rows)
 
-    messages.success(request, f'ჯავშანი წარმატებით შეიქმნა! ჯავშნის კოდი: {booking.pnr}')
     _allow_ticket(request, booking)
-    return redirect('ticket', pnr=booking.pnr)
+    return redirect('pay', pnr=booking.pnr)
+
+
+def pay(request, pnr):
+    booking = _ticket_booking(request, pnr)
+    if booking is None:
+        return redirect('checkin')
+    if booking.status != Booking.Status.PENDING:
+        return redirect('ticket', pnr=pnr)
+    if booking.payment_expired:
+        booking.status = Booking.Status.CANCELLED
+        booking.save(update_fields=['status'])
+        messages.error(request, f'გადახდის დრო ({Booking.PAYMENT_MINUTES} წთ) ამოიწურა — ჯავშანი გაუქმდა, ადგილები გათავისუფლდა')
+        return redirect('flight_detail', pk=booking.flight_id)
+
+    form = PaymentForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        with transaction.atomic():
+            # ჩაკეტვა, რომ ორჯერ არ გადაიხადოს
+            locked = Booking.objects.select_for_update().get(pk=booking.pk)
+            if locked.status == Booking.Status.PENDING:
+                locked.status = Booking.Status.ACTIVE
+                locked.paid_at = timezone.now()
+                locked.card_last4 = form.cleaned_data['card_number'][-4:]
+                locked.save(update_fields=['status', 'paid_at', 'card_last4'])
+        messages.success(request, f'გადახდა წარმატებულია! ბილეთის ნომერი: {booking.pnr}')
+        return redirect('ticket', pnr=pnr)
+
+    deadline = booking.created_at + timedelta(minutes=Booking.PAYMENT_MINUTES)
+    return render(request, 'flights/pay.html', {'booking': booking, 'form': form, 'deadline': deadline})
 
 
 # ===== ონლაინ რეგისტრაცია (check-in) და ბილეთის ნახვა =====
@@ -260,8 +288,10 @@ def checkin(request):
 def ticket(request, pnr):
     booking = _ticket_booking(request, pnr)
     if booking is None:
-        messages.error(request, 'ბილეთის სანახავად შეიყვანე ჯავშნის კოდი და გვარი')
+        messages.error(request, 'ბილეთის სანახავად შეიყვანე ბილეთის ნომერი და გვარი')
         return redirect('checkin')
+    if booking.status == Booking.Status.PENDING:
+        return redirect('pay', pnr=pnr)
     legs = [(booking.flight, booking.outbound_passengers())]
     if booking.return_flight:
         legs.append((booking.return_flight, booking.return_passengers()))
@@ -281,11 +311,28 @@ def do_checkin(request, pnr):
     return redirect('ticket', pnr=pnr)
 
 
+@require_POST
+def cancel_ticket(request, pnr):
+    """ბილეთის დაბრუნება — ბილეთის ნომრით (მფლობელს ან ვინც ნომერი + გვარი შეიყვანა)."""
+    booking = _ticket_booking(request, pnr)
+    if booking is None:
+        return redirect('checkin')
+    if booking.status == Booking.Status.CANCELLED:
+        messages.info(request, 'ბილეთი უკვე გაუქმებულია')
+    elif booking.flight.departure_time <= timezone.now():
+        messages.error(request, 'შესრულებული ფრენის ბილეთის დაბრუნება შეუძლებელია')
+    else:
+        booking.status = Booking.Status.CANCELLED
+        booking.save(update_fields=['status'])
+        messages.info(request, f'ბილეთი {booking.pnr} გაუქმდა. თანხა ({booking.total_price:.0f} ₾) დაგიბრუნდებათ ბარათზე.')
+    return redirect('ticket', pnr=pnr)
+
+
 @login_required
 @require_POST
 def cancel_booking(request, pk):
     booking = get_object_or_404(Booking, pk=pk, user=request.user)
-    if booking.status == Booking.Status.ACTIVE:
+    if booking.status in (Booking.Status.ACTIVE, Booking.Status.PENDING):
         booking.status = Booking.Status.CANCELLED
         booking.save(update_fields=['status'])
         messages.info(request, f'ჯავშანი #{booking.pk} გაუქმდა')

@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}გადახდა{% endblock %}
+{% block content %}
+<div class="steps">
+  <span class="step done">1. ფრენა ✓</span>
+  <span class="step done">2. ადგილები და მგზავრები ✓</span>
+  <span class="step active">3. გადახდა</span>
+  <span class="step">4. ბილეთი</span>
+</div>
+
+<div class="detail-layout">
+  <section class="card">
+    <h1>💳 გადახდა</h1>
+    <p class="muted">ადგილები დაგიჯავშნეთ <b>{{ deadline|time:"H:i" }}</b>-მდე. ამ დრომდე გადაუხდელი ჯავშანი ავტომატურად გაუქმდება.</p>
+    <div class="card-preview" aria-hidden="true">
+      <span class="chip"></span>
+      <span class="cp-number" data-preview="number">•••• •••• •••• ••••</span>
+      <div class="cp-bottom"><span data-preview="name">CARDHOLDER</span><span data-preview="expiry">MM/YY</span></div>
+    </div>
+    <form method="post" class="pay-form" novalidate>
+      {% csrf_token %}
+      {% include 'partials/form_fields.html' %}
+      <button class="btn btn-block" type="submit">გადახდა {{ booking.total_price|floatformat:0 }} ₾</button>
+    </form>
+    <p class="muted small">🔒 ეს სასწავლო პროექტია — გადახდა ფიქტიურია, ბარათიდან თანხა არ ჩამოიჭრება და ბარათის მონაცემები არ ინახება.
+      სატესტო ბარათი: <code>4242 4242 4242 4242</code>, ნებისმიერი მომავალი ვადა და CVV.</p>
+  </section>
+
+  <aside class="card booking-summary">
+    <h3>🧾 ინვოისი</h3>
+    <p class="muted">ბილეთის ნომერი: <b class="pnr">{{ booking.pnr }}</b></p>
+    <ul class="info">
+      <li><span>მარშრუტი</span><b>{{ booking.flight.origin.name }} {% if booking.is_round_trip %}⇄{% else %}→{% endif %} {{ booking.flight.destination.name }}</b></li>
+      <li><span>გაფრენა</span><b>{{ booking.flight.departure_time|date:"d.m.Y H:i" }}</b></li>
+      {% if booking.is_round_trip %}<li><span>დაბრუნება</span><b>{{ booking.return_flight.departure_time|date:"d.m.Y H:i" }}</b></li>{% endif %}
+      <li><span>კლასი</span><b>{{ booking.get_cabin_display }}</b></li>
+      <li><span>მგზავრები</span><b>{{ booking.outbound_passengers|length }}</b></li>
+      {% if booking.baggage_price %}<li><span>დამატებითი ბარგი</span><b>{{ booking.baggage_price|floatformat:0 }} ₾</b></li>{% endif %}
+    </ul>
+    <div class="total"><span>სულ:</span><b>{{ booking.total_price|floatformat:0 }} ₾</b></div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // ბარათის ნომრის ფორმატირება და წინასწარი ხედი
+  (function () {
+    const num = document.querySelector('[data-card="number"]');
+    const exp = document.querySelector('[data-card="expiry"]');
+    const name = document.querySelector('[name="card_name"]');
+    const pv = k => document.querySelector(`[data-preview="${k}"]`);
+    num.addEventListener('input', () => {
+      const d = num.value.replace(/\D/g, '').slice(0, 19);
+      num.value = d.replace(/(.{4})/g, '$1 ').trim();
+      pv('number').textContent = num.value || '•••• •••• •••• ••••';
+    });
+    exp.addEventListener('input', () => {
+      const d = exp.value.replace(/\D/g, '').slice(0, 4);
+      exp.value = d.length > 2 ? d.slice(0, 2) + '/' + d.slice(2) : d;
+      pv('expiry').textContent = exp.value || 'MM/YY';
+    });
+    name.addEventListener('input', () => (pv('name').textContent = name.value.toUpperCase() || 'CARDHOLDER'));
+  })();
+</script>
+{% endblock %}

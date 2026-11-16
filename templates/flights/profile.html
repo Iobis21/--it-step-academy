@@ -30,8 +30,14 @@
     </div>
     <div class="booking-side">
       <b>{{ b.total_price|floatformat:0 }} ₾</b>
-      <a class="btn" href="{% url 'ticket' b.pnr %}">🎫 ბილეთი{% if b.can_check_in and not b.is_checked_in %} / რეგისტრაცია{% endif %}</a>
-      {% if b.status == 'active' %}
+      {% if b.status == 'pending' and not b.payment_expired %}
+        <a class="btn" href="{% url 'pay' b.pnr %}">💳 გადახდა</a>
+      {% elif b.status != 'pending' %}
+        <a class="btn" href="{% url 'ticket' b.pnr %}">🎫 ბილეთი{% if b.can_check_in and not b.is_checked_in %} / რეგისტრაცია{% endif %}</a>
+      {% endif %}
+      {% if b.status == 'pending' and b.payment_expired %}
+        <span class="badge">გადახდის ვადა ამოიწურა</span>
+      {% elif b.status == 'active' or b.status == 'pending' %}
         <form method="post" action="{% url 'cancel_booking' b.pk %}" onsubmit="return confirm('ნამდვილად გსურს ჯავშნის გაუქმება?')">
           {% csrf_token %}
           <button class="btn btn-danger">გაუქმება</button>

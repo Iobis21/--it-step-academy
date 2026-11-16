@@ -132,8 +132,10 @@ class Flight(models.Model):
         return len(self.all_seats())
 
     def taken_seats(self):
+        """დაკავებული ადგილები: გადახდილი ჯავშნები + გადაუხდელი, რომლებიც ჯერ არ ვადაგასულა."""
         return set(
-            Passenger.objects.filter(flight=self, booking__status=Booking.Status.ACTIVE)
+            Passenger.objects.filter(flight=self)
+            .filter(Booking.holds_seats_q('booking__'))
             .values_list('seat', flat=True)
         )
 
@@ -173,8 +175,11 @@ class Booking(models.Model):
         BUSINESS = 'business', 'ბიზნესი'
 
     class Status(models.TextChoices):
-        ACTIVE = 'active', 'აქტიური'
+        PENDING = 'pending', 'გადასახდელი'
+        ACTIVE = 'active', 'გადახდილი'
         CANCELLED = 'cancelled', 'გაუქმებული'
+
+    PAYMENT_MINUTES = 15  # რამდენ ხანს ინახება ადგილი გადახდამდე
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings')
     pnr = models.CharField('ჯავშნის კოდი', max_length=6, unique=True, null=True, blank=True)
@@ -188,6 +193,8 @@ class Booking(models.Model):
     baggage_price = models.DecimalField('დამატებითი ბარგის ფასი', max_digits=10, decimal_places=2, default=0)
     status = models.CharField('სტატუსი', max_length=10, choices=Status.choices, default=Status.ACTIVE)
     created_at = models.DateTimeField('შექმნილია', auto_now_add=True)
+    paid_at = models.DateTimeField('გადახდილია', null=True, blank=True)
+    card_last4 = models.CharField('ბარათის ბოლო 4 ციფრი', max_length=4, blank=True)
 
     class Meta:
         verbose_name = 'ჯავშანი'
@@ -201,6 +208,26 @@ class Booking(models.Model):
         if not self.pnr:
             self.pnr = generate_pnr(Booking)
         super().save(*args, **kwargs)
+
+    @classmethod
+    def holds_seats_q(cls, prefix=''):
+        from datetime import timedelta
+        from django.utils import timezone
+        deadline = timezone.now() - timedelta(minutes=cls.PAYMENT_MINUTES)
+        return models.Q(**{f'{prefix}status': cls.Status.ACTIVE}) | models.Q(
+            **{f'{prefix}status': cls.Status.PENDING, f'{prefix}created_at__gte': deadline}
+        )
+
+    @property
+    def payment_expired(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        return (self.status == self.Status.PENDING
+                and self.created_at < timezone.now() - timedelta(minutes=self.PAYMENT_MINUTES))
+
+    @property
+    def is_paid(self):
+        return self.status == self.Status.ACTIVE
 
     @property
     def is_checked_in(self):

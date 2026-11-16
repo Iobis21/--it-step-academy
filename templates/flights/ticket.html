@@ -6,19 +6,29 @@
     <h1>ჩემი ბილეთი</h1>
     <p class="muted">ჯავშნის კოდი: <b class="pnr">{{ booking.pnr }}</b> ·
       {% if booking.is_round_trip %}ორმხრივი{% else %}ცალმხრივი{% endif %} ·
-      {{ booking.get_cabin_display }} · {{ booking.total_price|floatformat:0 }} ₾</p>
+      {{ booking.get_cabin_display }} · {{ booking.total_price|floatformat:0 }} ₾
+      {% if booking.card_last4 %}· გადახდილია ბარათით •••• {{ booking.card_last4 }}{% endif %}</p>
   </div>
   <div class="ticket-actions">
     {% if booking.status == 'cancelled' %}
       <span class="badge">გაუქმებულია</span>
-    {% elif booking.is_checked_in %}
-      <span class="badge badge-ok">✓ რეგისტრაცია გავლილია</span>
-      <button class="btn btn-outline" onclick="window.print()">🖨 ბეჭდვა</button>
-    {% elif booking.can_check_in %}
-      <form method="post" action="{% url 'do_checkin' booking.pnr %}">
-        {% csrf_token %}
-        <button class="btn">რეგისტრაციის გავლა</button>
-      </form>
+    {% else %}
+      {% if booking.is_checked_in %}
+        <span class="badge badge-ok">✓ რეგისტრაცია გავლილია</span>
+      {% elif booking.can_check_in %}
+        <form method="post" action="{% url 'do_checkin' booking.pnr %}">
+          {% csrf_token %}
+          <button class="btn">ონლაინ რეგისტრაცია</button>
+        </form>
+      {% endif %}
+      <button class="btn btn-outline" onclick="window.print()" title="ბეჭდვის ფანჯარაში აირჩიე „Save as PDF“">🖨 ბეჭდვა / PDF</button>
+      {% if booking.can_check_in %}
+        <form method="post" action="{% url 'cancel_ticket' booking.pnr %}"
+              onsubmit="return confirm('ნამდვილად გსურს ბილეთის დაბრუნება? ჯავშანი გაუქმდება.')">
+          {% csrf_token %}
+          <button class="btn btn-danger">ბილეთის დაბრუნება</button>
+        </form>
+      {% endif %}
     {% endif %}
   </div>
 </div>
