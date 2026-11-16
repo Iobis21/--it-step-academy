@@ -1,0 +1,8 @@
+{
+  "builds": [
+    { "src": "skybook/wsgi.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "skybook/wsgi.py" }
+  ]
+}
