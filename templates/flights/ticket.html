@@ -55,6 +55,7 @@
           <div><small>ჩასხდომა</small><b>{{ flight.departure_time|date:"H:i" }} -40წთ</b></div>
           <div><small>სტატუსი</small><b>{% if p.checked_in %}რეგისტრირებული{% else %}რეგისტრაცია არ გაუვლია{% endif %}</b></div>
         </div>
+        <div class="bp-bags">{% for line in p.baggage_lines %}<span>{{ line }}</span>{% endfor %}</div>
       </div>
       <div class="bp-stub">
         <small>ჯავშანი</small>

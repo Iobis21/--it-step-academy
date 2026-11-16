@@ -82,9 +82,14 @@ def _return_options(flight, return_date):
 def flight_detail(request, pk):
     flight = get_object_or_404(Flight.objects.select_related('airline', 'origin', 'destination'), pk=pk)
     cabin = _cabin(request.GET.get('cabin'))
+    # ორმხრივზე ბარგის პირობები ორივე ფრენის ავიაკომპანიას ეხება — ვაჩვენებთ წასვლის ფრენისას
     context = {
         'flight': flight,
         'cabin': cabin,
+        'bag_eco': flight.baggage('economy'),
+        'bag_bus': flight.baggage('business'),
+        'personal_item_size': Flight.PERSONAL_ITEM_SIZE,
+        'max_extra_checked': Flight.MAX_EXTRA_CHECKED,
         'seat_map': flight.seat_map(),
         'max_passengers': MAX_PASSENGERS,
         'is_favorite': request.user.is_authenticated
@@ -170,9 +175,22 @@ def book(request, pk):
     if passengers is None:
         return fail('შეავსე ყველა მგზავრის მონაცემები')
 
-    total = flight.price_for(cabin) * len(seats)
-    if return_flight:
-        total += return_flight.price_for(cabin) * len(seats)
+    # დამატებითი ბარგი თითოეულ მგზავრზე (ორმხრივზე ორივე ფრენას ეხება)
+    legs = [flight] + ([return_flight] if return_flight else [])
+    extras = []
+    for s in seats:
+        try:
+            checked = int(request.POST.get(f'checked_{s}', 0) or 0)
+        except ValueError:
+            checked = 0
+        if not 0 <= checked <= Flight.MAX_EXTRA_CHECKED:
+            return fail(f'დამატებითი ჩემოდანი მაქსიმუმ {Flight.MAX_EXTRA_CHECKED} ცალი')
+        extras.append((request.POST.get(f'cabin_bag_{s}') == '1', checked))
+    baggage_total = sum(
+        leg.extras_price(cabin, cabin_bag, checked) for leg in legs for cabin_bag, checked in extras
+    )
+
+    total = sum(leg.price_for(cabin) for leg in legs) * len(seats) + baggage_total
 
     with transaction.atomic():
         if flight.taken_seats() & set(seats):
@@ -180,17 +198,21 @@ def book(request, pk):
         if return_flight and return_flight.taken_seats() & set(return_seats):
             return fail('დაბრუნების ფრენაზე არჩეული ადგილი უკვე დაკავებულია')
         booking = Booking.objects.create(
-            user=request.user, flight=flight, return_flight=return_flight, cabin=cabin, total_price=total,
+            user=request.user, flight=flight, return_flight=return_flight, cabin=cabin,
+            total_price=total, baggage_price=baggage_total,
         )
-        rows = [
-            Passenger(booking=booking, flight=flight, seat=s, first_name=f, last_name=l, passport=p)
-            for s, (f, l, p) in zip(seats, passengers)
-        ]
-        if return_flight:
-            rows += [
-                Passenger(booking=booking, flight=return_flight, seat=s, first_name=f, last_name=l, passport=p)
-                for s, (f, l, p) in zip(return_seats, passengers)
+
+        def make(leg, seat_list):
+            return [
+                Passenger(booking=booking, flight=leg, seat=s, first_name=f, last_name=l, passport=p,
+                          extra_cabin_bag=cabin_bag and leg.baggage(cabin)['cabin_bags'] == 0,
+                          extra_checked_bags=checked)
+                for s, (f, l, p), (cabin_bag, checked) in zip(seat_list, passengers, extras)
             ]
+
+        rows = make(flight, seats)
+        if return_flight:
+            rows += make(return_flight, return_seats)
         Passenger.objects.bulk_create(rows)
 
     messages.success(request, f'ჯავშანი წარმატებით შეიქმნა! ჯავშნის კოდი: {booking.pnr}')

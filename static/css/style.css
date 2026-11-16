@@ -220,6 +220,22 @@ label.check input { width: auto; margin: 0; accent-color: var(--primary); }
 .filters .toggles .trip-toggle { margin: 0; }
 .cabin-tag { font-size: 11px; font-weight: 400; color: var(--gold); text-shadow: none; }
 
+/* ===== ბარგი ===== */
+.bag-list { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.bag-list small { color: var(--muted); }
+.bag-list .yes::before { content: '✓ '; color: var(--success); font-weight: 700; }
+.bag-list .no { color: var(--muted); }
+.bag-list .no::before { content: '✗ '; color: var(--danger); font-weight: 700; }
+.bag-list .extra { color: var(--gold); }
+.bag-extras { margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--glass-border); }
+.bag-extras label { font-size: 13px; color: var(--text); margin-bottom: 8px; }
+.bag-extras b { color: var(--gold); }
+.bag-select select { margin-top: 4px; padding: 7px 10px; }
+.price-lines { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+.price-lines div { display: flex; justify-content: space-between; }
+.price-lines b { color: var(--text); }
+.bp-bags { margin-top: 12px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+
 /* ===== თვითმფრინავის 2D სქემა ===== */
 .plane-wrap { display: flex; justify-content: center; overflow: hidden; padding: 10px 0 20px; }
 .plane { --body: rgba(255, 255, 255, .13); --skin: rgba(255, 255, 255, .3); position: relative; display: flex; flex-direction: column; align-items: center; }

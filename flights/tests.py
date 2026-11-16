@@ -163,6 +163,40 @@ class BookingFlowTests(TestCase):
         self.assertContains(r, 'class="plane"')
         self.assertContains(r, 'value="business" checked')
 
+    def _flight_of(self, low_cost):
+        return Flight.objects.filter(airline__low_cost=low_cost).first()
+
+    def _book_with_bags(self, flight, seat, cabin_bag, checked):
+        return self.client.post(reverse('book', args=[flight.pk]), {
+            'seat': [seat], f'first_name_{seat}': 'ა', f'last_name_{seat}': 'ბ', f'passport_{seat}': '1',
+            f'cabin_bag_{seat}': '1' if cabin_bag else '', f'checked_{seat}': str(checked),
+        })
+
+    def test_low_cost_baggage_extras(self):
+        f = self._flight_of(True)
+        self.login()
+        self._book_with_bags(f, '5A', True, 2)
+        b = Booking.objects.get()
+        self.assertEqual(b.baggage_price, 49 + 2 * 99)
+        self.assertEqual(b.total_price, f.economy_price + 49 + 2 * 99)
+        p = b.passengers.get()
+        self.assertTrue(p.extra_cabin_bag)
+        self.assertIn('🛄 ჩემოდანი 2 × 20 კგ', p.baggage_lines())
+
+    def test_full_service_includes_cabin_bag(self):
+        f = self._flight_of(False)
+        self.login()
+        self._book_with_bags(f, '5A', True, 1)  # ხელბარგი უკვე შედის — უფასოა
+        b = Booking.objects.get()
+        self.assertEqual(b.baggage_price, 129)
+        self.assertFalse(b.passengers.get().extra_cabin_bag)
+        self.assertIn('🛄 ჩემოდანი 2 × 23 კგ', b.passengers.get().baggage_lines())
+
+    def test_too_many_extra_bags_rejected(self):
+        self.login()
+        self._book_with_bags(self.flight, '5A', False, 9)
+        self.assertEqual(Booking.objects.count(), 0)
+
     def test_cannot_cancel_others_booking(self):
         self.login()
         self.book(['4C'])

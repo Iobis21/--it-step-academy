@@ -46,6 +46,7 @@ ROUTES = {
     'BCN': ['W6', 'TK', 'PC'],
 }
 DOMESTIC_AIRLINE = 'A9'
+LOW_COST = {'W6', 'PC'}
 CRUISE_SPEED_KMH = 780
 
 
@@ -81,7 +82,8 @@ def generate_flights(City, Airline, Flight, days=30, per_day=8, seed=42):
         cities[code] = City.objects.update_or_create(airport_code=code, defaults={'name': name, 'image_url': img})[0]
     airlines = {}
     for name, code, factor in AIRLINES:
-        airlines[code] = (Airline.objects.update_or_create(code=code, defaults={'name': name})[0], factor)
+        airlines[code] = (Airline.objects.update_or_create(
+            code=code, defaults={'name': name, 'low_cost': code in LOW_COST})[0], factor)
 
     georgian = [c for c, (_, g) in coords.items() if g]
     foreign = [c for c, (_, g) in coords.items() if not g]

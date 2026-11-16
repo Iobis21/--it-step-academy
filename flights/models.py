@@ -31,6 +31,8 @@ class City(models.Model):
 class Airline(models.Model):
     name = models.CharField('სახელი', max_length=100, unique=True)
     code = models.CharField('კოდი', max_length=2, unique=True)
+    low_cost = models.BooleanField('ლოუქოსტერი', default=False,
+                                   help_text='ლოუქოსტერის ეკონომ ბილეთში შედის მხოლოდ პირადი ნივთი')
 
     class Meta:
         verbose_name = 'ავიაკომპანია'
@@ -86,6 +88,31 @@ class Flight(models.Model):
         if not h:
             return f'{m}წთ'
         return f'{h}სთ {m}წთ' if m else f'{h}სთ'
+
+    # ===== ბარგი =====
+    PERSONAL_ITEM_SIZE = '40×30×20 სმ'
+    MAX_EXTRA_CHECKED = 3
+
+    def baggage(self, cabin):
+        """რა შედის ბილეთში და რა ღირს დამატებითი ბარგი (ერთ მგზავრზე, ამ ფრენაზე)."""
+        if cabin == Booking.Cabin.BUSINESS:
+            return {'cabin_bags': 2, 'cabin_kg': 8, 'checked_bags': 2, 'checked_kg': 32,
+                    'extra_cabin_price': 0, 'extra_checked_price': 199}
+        if self.airline.low_cost:
+            return {'cabin_bags': 0, 'cabin_kg': 10, 'checked_bags': 0, 'checked_kg': 20,
+                    'extra_cabin_price': 49, 'extra_checked_price': 99}
+        return {'cabin_bags': 1, 'cabin_kg': 8, 'checked_bags': 1, 'checked_kg': 23,
+                'extra_cabin_price': 0, 'extra_checked_price': 129}
+
+    def baggage_info(self):
+        return {c: self.baggage(c) for c in (Booking.Cabin.ECONOMY, Booking.Cabin.BUSINESS)}
+
+    def extras_price(self, cabin, extra_cabin_bag, extra_checked):
+        bag = self.baggage(cabin)
+        price = extra_checked * bag['extra_checked_price']
+        if extra_cabin_bag and bag['cabin_bags'] == 0:
+            price += bag['extra_cabin_price']
+        return price
 
     @classmethod
     def layout_for_row(cls, row):
@@ -158,6 +185,7 @@ class Booking(models.Model):
     )
     cabin = models.CharField('კლასი', max_length=10, choices=Cabin.choices)
     total_price = models.DecimalField('ჯამური ფასი', max_digits=10, decimal_places=2)
+    baggage_price = models.DecimalField('დამატებითი ბარგის ფასი', max_digits=10, decimal_places=2, default=0)
     status = models.CharField('სტატუსი', max_length=10, choices=Status.choices, default=Status.ACTIVE)
     created_at = models.DateTimeField('შექმნილია', auto_now_add=True)
 
@@ -202,6 +230,8 @@ class Passenger(models.Model):
     passport = models.CharField('პასპორტი / პირადი ნომერი', max_length=20)
     seat = models.CharField('ადგილი', max_length=4)
     checked_in = models.BooleanField('რეგისტრაცია გავლილია', default=False)
+    extra_cabin_bag = models.BooleanField('დამატებითი ხელბარგი', default=False)
+    extra_checked_bags = models.PositiveSmallIntegerField('დამატებითი ჩემოდანი', default=0)
 
     class Meta:
         verbose_name = 'მგზავრი'
@@ -209,6 +239,18 @@ class Passenger(models.Model):
 
     def __str__(self):
         return f'{self.first_name} {self.last_name} ({self.seat})'
+
+    def baggage_lines(self):
+        """ბილეთზე საჩვენებელი ბარგი: შეტანილი + ნაყიდი."""
+        bag = self.flight.baggage(self.booking.cabin)
+        cabin_bags = bag['cabin_bags'] or (1 if self.extra_cabin_bag else 0)
+        checked = bag['checked_bags'] + self.extra_checked_bags
+        lines = [f'🎒 პირადი ნივთი ({Flight.PERSONAL_ITEM_SIZE})']
+        if cabin_bags:
+            lines.append(f'🧳 ხელბარგი {cabin_bags} × {bag["cabin_kg"]} კგ')
+        if checked:
+            lines.append(f'🛄 ჩემოდანი {checked} × {bag["checked_kg"]} კგ')
+        return lines
 
 
 class Favorite(models.Model):

@@ -1,6 +1,12 @@
 {# თვითმფრინავის 2D სქემა: ცხვირი → ბიზნესი → სამზარეულო → ეკონომი (ფრთებით) → კუდი #}
 <div class="plane-wrap">
-  <div class="plane" data-leg="{{ leg }}" data-economy="{{ f.economy_price }}" data-business="{{ f.business_price }}">
+  {% with bags=f.baggage_info %}
+  <div class="plane" data-leg="{{ leg }}" data-economy="{{ f.economy_price }}" data-business="{{ f.business_price }}"
+       data-xcabin-economy="{% if bags.economy.cabin_bags %}0{% else %}{{ bags.economy.extra_cabin_price }}{% endif %}"
+       data-xcabin-business="0"
+       data-xchecked-economy="{{ bags.economy.extra_checked_price }}" data-xchecked-business="{{ bags.business.extra_checked_price }}"
+       data-checked-kg-economy="{{ bags.economy.checked_kg }}" data-checked-kg-business="{{ bags.business.checked_kg }}"
+       data-cabin-kg-economy="{{ bags.economy.cabin_kg }}">
     <div class="plane-nose">
       <div class="cockpit"><i></i><i></i><i></i></div>
       <small>{{ f.airline.name }}</small>
@@ -33,4 +39,5 @@
 
     <div class="plane-tail"></div>
   </div>
+  {% endwith %}
 </div>

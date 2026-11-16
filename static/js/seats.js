@@ -40,10 +40,32 @@
     render();
   }
 
+  const maxChecked = Number(form.dataset.maxChecked || 3);
+  const priceLines = document.getElementById('price-lines');
+  const num = (el, key) => Number(el.dataset[key] || 0);
+
+  // დამატებითი ბარგის ფასი ერთ მგზავრზე — ჯამი ყველა ფრენაზე (წასვლა + დაბრუნება)
+  function bagPrices(cabin) {
+    const key = cabin === 'business' ? 'Business' : 'Economy';
+    let xcabin = 0, xchecked = 0;
+    for (const leg of Object.values(legs)) {
+      xcabin += num(leg.plane, 'xcabin' + key);
+      xchecked += num(leg.plane, 'xchecked' + key);
+    }
+    return {
+      xcabin, xchecked,
+      checkedKg: num(legs.out.plane, 'checkedKg' + key),
+      cabinKg: num(legs.out.plane, 'cabinKgEconomy'),
+    };
+  }
+
   function render() {
     const saved = {};
-    list.querySelectorAll('input').forEach(i => (saved[i.name] = i.value));
+    list.querySelectorAll('input, select').forEach(i => {
+      saved[i.name] = i.type === 'checkbox' ? (i.checked ? '1' : '') : i.value;
+    });
     list.innerHTML = '';
+    const bp = bagPrices(currentCabin());
 
     const outSeats = legs.out.selected;
     const retSeats = hasReturn ? legs.ret.selected : [];
@@ -59,15 +81,29 @@
         ${retSeat ? `<input type="hidden" name="return_seat" value="${retSeat}">` : ''}
         <input name="first_name_${seat}" placeholder="სახელი" required>
         <input name="last_name_${seat}" placeholder="გვარი" required>
-        <input name="passport_${seat}" placeholder="პასპორტი / პირადი ნომერი" required>`;
-      fs.querySelectorAll('input:not([type=hidden])').forEach(inp => (inp.value = saved[inp.name] || ''));
+        <input name="passport_${seat}" placeholder="პასპორტი / პირადი ნომერი" required>
+        <div class="bag-extras">
+          ${bp.xcabin ? `
+          <label class="check">
+            <input type="checkbox" name="cabin_bag_${seat}" value="1" data-bag>
+            🧳 ხელბარგი ${bp.cabinKg} კგ <b>+${bp.xcabin} ₾</b>
+          </label>` : ''}
+          <label class="bag-select">🛄 დამატებითი ჩემოდანი ${bp.checkedKg} კგ
+            <select name="checked_${seat}" data-bag>
+              ${Array.from({ length: maxChecked + 1 }, (_, n) =>
+                `<option value="${n}">${n ? n + ' ც. (+' + n * bp.xchecked + ' ₾)' : 'არა'}</option>`).join('')}
+            </select>
+          </label>
+        </div>`;
+      fs.querySelectorAll('input:not([type=hidden]), select').forEach(inp => {
+        if (inp.type === 'checkbox') inp.checked = saved[inp.name] === '1';
+        else if (saved[inp.name] !== undefined) inp.value = saved[inp.name];
+      });
+      fs.querySelectorAll('[data-bag]').forEach(inp => inp.addEventListener('change', updateTotal));
       list.appendChild(fs);
     });
 
-    const cabin = currentCabin();
-    let total = 0;
-    for (const leg of Object.values(legs)) total += leg.selected.length * leg.prices[cabin];
-    totalEl.textContent = total + ' ₾';
+    updateTotal();
 
     let ready = outSeats.length > 0;
     if (hasReturn && outSeats.length && retSeats.length !== outSeats.length) {
@@ -78,6 +114,25 @@
     }
     errorEl.dataset.kind = hasReturn && !ready && outSeats.length ? 'count' : '';
     if (bookBtn) bookBtn.disabled = !ready;
+  }
+
+  function updateTotal() {
+    const cabin = currentCabin();
+    const bp = bagPrices(cabin);
+    let tickets = 0;
+    for (const leg of Object.values(legs)) tickets += leg.selected.length * leg.prices[cabin];
+
+    let cabinBags = 0, checked = 0;
+    list.querySelectorAll('input[name^="cabin_bag_"]:checked').forEach(() => cabinBags++);
+    list.querySelectorAll('select[name^="checked_"]').forEach(s => (checked += Number(s.value)));
+    const baggage = cabinBags * bp.xcabin + checked * bp.xchecked;
+
+    const lines = [];
+    if (tickets) lines.push(`<span>ბილეთები (${legs.out.selected.length} მგზ.)</span><b>${tickets} ₾</b>`);
+    if (cabinBags) lines.push(`<span>ხელბარგი × ${cabinBags}</span><b>${cabinBags * bp.xcabin} ₾</b>`);
+    if (checked) lines.push(`<span>ჩემოდანი × ${checked}</span><b>${checked * bp.xchecked} ₾</b>`);
+    priceLines.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+    totalEl.textContent = (tickets + baggage) + ' ₾';
   }
 
   Object.entries(legs).forEach(([name, leg]) => {

@@ -41,7 +41,7 @@
 {% else %}
 
 <form method="post" action="{% url 'book' flight.pk %}" id="booking-form" class="detail-layout"
-      data-max="{{ max_passengers }}">
+      data-max="{{ max_passengers }}" data-max-checked="{{ max_extra_checked }}">
   {% csrf_token %}
   {% if return_flight %}<input type="hidden" name="return_flight" value="{{ return_flight.pk }}">{% endif %}
   <div class="legs">
@@ -52,7 +52,8 @@
           <input type="radio" name="cabin" value="economy" {% if cabin != 'business' %}checked{% endif %}>
           <span>
             <b>💺 ეკონომ კლასი</b>
-            <small>სტანდარტული ადგილი · ხელბარგი 8 კგ · 3+3 განლაგება</small>
+            <small>ბილეთში შედის{% if flight.airline.low_cost %} ({{ flight.airline.name }} — ლოუქოსტერი){% endif %}:</small>
+            {% include 'partials/baggage_list.html' with bag=bag_eco %}
             <em>{% if return_flight %}{{ flight.economy_price|add:return_flight.economy_price|floatformat:0 }}{% else %}{{ flight.economy_price|floatformat:0 }}{% endif %} ₾ <small>/ მგზავრი</small></em>
           </span>
         </label>
@@ -60,7 +61,8 @@
           <input type="radio" name="cabin" value="business" {% if cabin == 'business' %}checked{% endif %}>
           <span>
             <b>🥂 ბიზნეს კლასი</b>
-            <small>ფართო სავარძელი · 2×32 კგ ბარგი · ლაუნჯი · კვება</small>
+            <small>ფართო სავარძელი · ბიზნეს ლაუნჯი · კვება · ბილეთში შედის:</small>
+            {% include 'partials/baggage_list.html' with bag=bag_bus %}
             <em>{% if return_flight %}{{ flight.business_price|add:return_flight.business_price|floatformat:0 }}{% else %}{{ flight.business_price|floatformat:0 }}{% endif %} ₾ <small>/ მგზავრი</small></em>
           </span>
         </label>
@@ -112,6 +114,7 @@
   <aside class="card booking-summary">
     <h3>მგზავრები</h3>
     <div id="passengers"><p class="muted">აირჩიე ადგილი სქემაზე</p></div>
+    <div class="price-lines" id="price-lines"></div>
     <div class="total"><span>სულ:</span><b id="total">0 ₾</b></div>
     <p class="error" id="seat-error"></p>
     {% if user.is_authenticated %}
