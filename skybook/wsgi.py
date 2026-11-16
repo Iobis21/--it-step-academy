@@ -30,10 +30,16 @@ if os.environ.get('VERCEL'):
     # თუ ამ ელ-ფოსტით მომხმარებელი უკვე არსებობს — მას ადმინის უფლებებს ვაძლევთ.
     from accounts.models import User
 
-    # strip() — ზედმეტი სივრცეების/ხაზის ბოლოს მოსაშორებლად
-    admin_email = os.environ.get('ADMIN_EMAIL', '').strip().lower()
-    admin_password = os.environ.get('ADMIN_PASSWORD', '').strip()
+    # strip() — ზედმეტი სივრცეების/ხაზის ბოლოს და უხილავი BOM სიმბოლოს (\ufeff) მოსაშორებლად
+    admin_email = os.environ.get('ADMIN_EMAIL', '').strip().lstrip('\ufeff').lower()
+    admin_password = os.environ.get('ADMIN_PASSWORD', '').strip().lstrip('\ufeff')
     if admin_email and admin_password:
+        # ადრე BOM-იანი ელ-ფოსტით შექმნილი ანგარიშის გასწორება
+        for broken in User.objects.filter(email='\ufeff' + admin_email):
+            broken.email = admin_email
+            broken.username = admin_email
+            broken.save()
+
         admin = User.objects.filter(email=admin_email).first()
         if admin is None:
             User.objects.create_superuser(
