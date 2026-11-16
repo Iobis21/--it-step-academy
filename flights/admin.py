@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.db.models import Count
 
 from .models import Airline, Booking, City, Favorite, Flight, Passenger
 
@@ -49,16 +48,15 @@ class BookingAdmin(admin.ModelAdmin):
                      'passengers__first_name', 'passengers__last_name', 'passengers__passport']
     date_hierarchy = 'created_at'
     readonly_fields = ['pnr', 'created_at', 'paid_at', 'card_last4']
-    list_select_related = ['user', 'flight__origin', 'flight__destination', 'flight__airline']
     inlines = [PassengerInline]
     actions = ['cancel_selected']
 
-    def get_queryset(self, request):
-        return super().get_queryset(request).annotate(n_passengers=Count('passengers'))
-
     @admin.display(description='მარშრუტი')
     def route(self, obj):
-        arrow = '⇄' if obj.return_flight_id else '→'
+        if obj.return_flight_id:
+            arrow = '⇄'
+        else:
+            arrow = '→'
         return f'{obj.flight.origin.name} {arrow} {obj.flight.destination.name}'
 
     @admin.display(description='გაფრენა', ordering='flight__departure_time')
@@ -71,17 +69,18 @@ class BookingAdmin(admin.ModelAdmin):
 
     @admin.display(description='მგზავრი')
     def passenger_count(self, obj):
-        # ორმხრივზე თითო მგზავრი ორჯერ ინახება (ორივე ფრენაზე)
-        return obj.n_passengers // (2 if obj.return_flight_id else 1)
+        return obj.outbound_passengers().count()
 
     @admin.display(description='ბარათი')
     def card(self, obj):
-        return f'•••• {obj.card_last4}' if obj.card_last4 else '—'
+        if obj.card_last4:
+            return '•••• ' + obj.card_last4
+        return '—'
 
     @admin.action(description='არჩეული ჯავშნების გაუქმება')
     def cancel_selected(self, request, queryset):
-        n = queryset.exclude(status=Booking.Status.CANCELLED).update(status=Booking.Status.CANCELLED)
-        self.message_user(request, f'გაუქმდა {n} ჯავშანი')
+        count = queryset.exclude(status='cancelled').update(status='cancelled')
+        self.message_user(request, f'გაუქმდა {count} ჯავშანი')
 
 
 @admin.register(Passenger)
@@ -89,7 +88,6 @@ class PassengerAdmin(admin.ModelAdmin):
     list_display = ['last_name', 'first_name', 'passport', 'seat', 'flight', 'booking', 'checked_in']
     list_filter = ['checked_in', 'booking__status']
     search_fields = ['first_name', 'last_name', 'passport', 'booking__pnr']
-    list_select_related = ['flight', 'booking']
 
 
 admin.site.register(Favorite)

@@ -1,15 +1,49 @@
-import secrets
+import random
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
-# ჯავშნის კოდი — 6 სიმბოლო, დამაბნეველი სიმბოლოების (0/O, 1/I) გარეშე
-PNR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+# ===== სალონის განლაგება =====
+# ბიზნესი: 1-3 რიგი, 4 ადგილი რიგში (A C | D F)
+# ეკონომი: 4-15 რიგი, 6 ადგილი რიგში (A B C | D E F)
+BUSINESS_ROWS = 3
+TOTAL_ROWS = 15
+EXIT_ROW = 9  # საავარიო გასასვლელი (ფრთებთან)
+
+# ===== ბარგი =====
+PERSONAL_ITEM_SIZE = '40×30×20 სმ'
+MAX_EXTRA_CHECKED = 3
+
+# გადახდისთვის ადგილი 15 წუთით ინახება
+PAYMENT_MINUTES = 15
+
+
+def seat_letters(row):
+    """რიგში რომელი ადგილებია (მარცხენა მხარე, მარჯვენა მხარე)."""
+    if row <= BUSINESS_ROWS:
+        return 'AC', 'DF'
+    return 'ABC', 'DEF'
+
+
+def all_seats():
+    """თვითმფრინავის ყველა ადგილის სია, მაგ: ['1A', '1C', ..., '15F']"""
+    seats = []
+    for row in range(1, TOTAL_ROWS + 1):
+        left, right = seat_letters(row)
+        for letter in left + right:
+            seats.append(str(row) + letter)
+    return seats
 
 
 def generate_pnr(model):
+    """6-სიმბოლოიანი უნიკალური ბილეთის ნომერი (0/O და 1/I გარეშე, რომ არ აგერიოს)."""
+    letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
     while True:
-        code = ''.join(secrets.choice(PNR_ALPHABET) for _ in range(6))
+        code = ''
+        for i in range(6):
+            code += random.choice(letters)
         if not model.objects.filter(pnr=code).exists():
             return code
 
@@ -44,14 +78,6 @@ class Airline(models.Model):
 
 
 class Flight(models.Model):
-    # სალონის განლაგება: ბიზნესი 2+2 (A C | D F), ეკონომი 3+3 (A B C | D E F)
-    BUSINESS_ROWS = 3
-    ECONOMY_ROWS = 12
-    ROWS = BUSINESS_ROWS + ECONOMY_ROWS
-    BUSINESS_LAYOUT = ('AC', 'DF')
-    ECONOMY_LAYOUT = ('ABC', 'DEF')
-    EXIT_ROWS = (BUSINESS_ROWS + 6,)  # საავარიო გასასვლელის რიგი (ფრთებთან)
-
     flight_number = models.CharField('ფრენის ნომერი', max_length=10)
     airline = models.ForeignKey(Airline, on_delete=models.PROTECT, related_name='flights', verbose_name='ავიაკომპანია')
     origin = models.ForeignKey(City, on_delete=models.PROTECT, related_name='departures', verbose_name='საიდან')
@@ -70,32 +96,45 @@ class Flight(models.Model):
     def __str__(self):
         return f'{self.flight_number}: {self.origin.name} → {self.destination.name}'
 
+    # ----- დრო -----
     @property
     def duration_minutes(self):
-        return int((self.arrival_time - self.departure_time).total_seconds() // 60)
-
-    def is_valid_return_for(self, outbound):
-        """შეიძლება თუ არა ეს ფრენა იყოს `outbound`-ის დაბრუნების ფრენა."""
-        return (
-            self.origin_id == outbound.destination_id
-            and self.destination_id == outbound.origin_id
-            and self.departure_time > outbound.arrival_time
-        )
+        seconds = (self.arrival_time - self.departure_time).total_seconds()
+        return int(seconds // 60)
 
     @property
     def duration_display(self):
-        h, m = divmod(self.duration_minutes, 60)
-        if not h:
-            return f'{m}წთ'
-        return f'{h}სთ {m}წთ' if m else f'{h}სთ'
+        hours = self.duration_minutes // 60
+        minutes = self.duration_minutes % 60
+        if hours == 0:
+            return f'{minutes}წთ'
+        if minutes == 0:
+            return f'{hours}სთ'
+        return f'{hours}სთ {minutes}წთ'
 
-    # ===== ბარგი =====
-    PERSONAL_ITEM_SIZE = '40×30×20 სმ'
-    MAX_EXTRA_CHECKED = 3
+    def is_valid_return_for(self, outbound):
+        """არის თუ არა ეს ფრენა outbound ფრენის დაბრუნება (უკუ მარშრუტი, ჩაფრენის შემდეგ)."""
+        same_route = self.origin_id == outbound.destination_id and self.destination_id == outbound.origin_id
+        is_later = self.departure_time > outbound.arrival_time
+        return same_route and is_later
 
+    # ----- ფასი და კლასი -----
+    def price_for(self, cabin):
+        if cabin == 'business':
+            return self.business_price
+        return self.economy_price
+
+    def cabin_of(self, seat):
+        """ადგილის ნომრიდან (მაგ. '12C') კლასის გაგება."""
+        row = int(seat[:-1])
+        if row <= BUSINESS_ROWS:
+            return 'business'
+        return 'economy'
+
+    # ----- ბარგი -----
     def baggage(self, cabin):
-        """რა შედის ბილეთში და რა ღირს დამატებითი ბარგი (ერთ მგზავრზე, ამ ფრენაზე)."""
-        if cabin == Booking.Cabin.BUSINESS:
+        """რა შედის ბილეთში და რა ღირს დამატებითი ბარგი (ერთ მგზავრზე)."""
+        if cabin == 'business':
             return {'cabin_bags': 2, 'cabin_kg': 8, 'checked_bags': 2, 'checked_kg': 32,
                     'extra_cabin_price': 0, 'extra_checked_price': 199}
         if self.airline.low_cost:
@@ -105,68 +144,56 @@ class Flight(models.Model):
                 'extra_cabin_price': 0, 'extra_checked_price': 129}
 
     def baggage_info(self):
-        return {c: self.baggage(c) for c in (Booking.Cabin.ECONOMY, Booking.Cabin.BUSINESS)}
+        return {'economy': self.baggage('economy'), 'business': self.baggage('business')}
 
     def extras_price(self, cabin, extra_cabin_bag, extra_checked):
+        """დამატებითი ბარგის ფასი ერთ მგზავრზე."""
         bag = self.baggage(cabin)
         price = extra_checked * bag['extra_checked_price']
+        # ხელბარგს ვიხდით მხოლოდ მაშინ, თუ ბილეთში არ შედის
         if extra_cabin_bag and bag['cabin_bags'] == 0:
             price += bag['extra_cabin_price']
         return price
 
-    @classmethod
-    def layout_for_row(cls, row):
-        return cls.BUSINESS_LAYOUT if row <= cls.BUSINESS_ROWS else cls.ECONOMY_LAYOUT
-
-    @classmethod
-    def all_seats(cls):
-        return {
-            f'{r}{l}'
-            for r in range(1, cls.ROWS + 1)
-            for side in cls.layout_for_row(r)
-            for l in side
-        }
-
+    # ----- ადგილები -----
     @property
     def seats_total(self):
-        return len(self.all_seats())
+        return len(all_seats())
 
     def taken_seats(self):
-        """დაკავებული ადგილები: გადახდილი ჯავშნები + გადაუხდელი, რომლებიც ჯერ არ ვადაგასულა."""
-        return set(
-            Passenger.objects.filter(flight=self)
-            .filter(Booking.holds_seats_q('booking__'))
-            .values_list('seat', flat=True)
-        )
+        """დაკავებული ადგილები: გადახდილი ჯავშნები + გადაუხდელი, რომლის 15 წუთიც ჯერ არ გასულა."""
+        deadline = timezone.now() - timedelta(minutes=PAYMENT_MINUTES)
+        taken = set()
+        for p in Passenger.objects.filter(flight=self).select_related('booking'):
+            status = p.booking.status
+            if status == 'active':
+                taken.add(p.seat)
+            elif status == 'pending' and p.booking.created_at >= deadline:
+                taken.add(p.seat)
+        return taken
 
     def seats_left(self):
         return self.seats_total - len(self.taken_seats())
 
-    def cabin_of(self, seat):
-        row = int(seat[:-1])
-        return Booking.Cabin.BUSINESS if row <= self.BUSINESS_ROWS else Booking.Cabin.ECONOMY
-
-    def price_for(self, cabin):
-        return self.business_price if cabin == Booking.Cabin.BUSINESS else self.economy_price
-
     def seat_map(self):
-        """სალონის სქემა თვითმფრინავის ნახატისთვის.
-
-        აბრუნებს: {'business': [row, ...], 'economy': [row, ...]}, სადაც
-        row = {'number', 'exit', 'left': [(seat, letter, taken)], 'right': [...]}
-        """
+        """თვითმფრინავის სქემა შაბლონისთვის: ბიზნესის და ეკონომის რიგები."""
         taken = self.taken_seats()
-        cabins = {'business': [], 'economy': []}
-        for r in range(1, self.ROWS + 1):
-            left, right = self.layout_for_row(r)
-            row = {
-                'number': r,
-                'exit': r in self.EXIT_ROWS,
-                'left': [(f'{r}{l}', l, f'{r}{l}' in taken) for l in left],
-                'right': [(f'{r}{l}', l, f'{r}{l}' in taken) for l in right],
-            }
-            cabins['business' if r <= self.BUSINESS_ROWS else 'economy'].append(row)
-        return cabins
+        business = []
+        economy = []
+        for number in range(1, TOTAL_ROWS + 1):
+            left, right = seat_letters(number)
+            row = {'number': number, 'exit': number == EXIT_ROW, 'left': [], 'right': []}
+            for letter in left:
+                seat = str(number) + letter
+                row['left'].append((seat, letter, seat in taken))
+            for letter in right:
+                seat = str(number) + letter
+                row['right'].append((seat, letter, seat in taken))
+            if number <= BUSINESS_ROWS:
+                business.append(row)
+            else:
+                economy.append(row)
+        return {'business': business, 'economy': economy}
 
 
 class Booking(models.Model):
@@ -178,8 +205,6 @@ class Booking(models.Model):
         PENDING = 'pending', 'გადასახდელი'
         ACTIVE = 'active', 'გადახდილი'
         CANCELLED = 'cancelled', 'გაუქმებული'
-
-    PAYMENT_MINUTES = 15  # რამდენ ხანს ინახება ადგილი გადახდამდე
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings')
     pnr = models.CharField('ჯავშნის კოდი', max_length=6, unique=True, null=True, blank=True)
@@ -202,51 +227,39 @@ class Booking(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.pnr or self.pk} {self.user} — {self.flight}'
+        return f'{self.pnr} {self.user} — {self.flight}'
 
     def save(self, *args, **kwargs):
+        # ახალ ჯავშანს ავტომატურად ვანიჭებთ ბილეთის ნომერს
         if not self.pnr:
             self.pnr = generate_pnr(Booking)
         super().save(*args, **kwargs)
 
-    @classmethod
-    def holds_seats_q(cls, prefix=''):
-        from datetime import timedelta
-        from django.utils import timezone
-        deadline = timezone.now() - timedelta(minutes=cls.PAYMENT_MINUTES)
-        return models.Q(**{f'{prefix}status': cls.Status.ACTIVE}) | models.Q(
-            **{f'{prefix}status': cls.Status.PENDING, f'{prefix}created_at__gte': deadline}
-        )
-
     @property
     def payment_expired(self):
-        from datetime import timedelta
-        from django.utils import timezone
-        return (self.status == self.Status.PENDING
-                and self.created_at < timezone.now() - timedelta(minutes=self.PAYMENT_MINUTES))
-
-    @property
-    def is_paid(self):
-        return self.status == self.Status.ACTIVE
-
-    @property
-    def is_checked_in(self):
-        return all(p.checked_in for p in self.passengers.all())
-
-    @property
-    def can_check_in(self):
-        from django.utils import timezone
-        return self.status == self.Status.ACTIVE and self.flight.departure_time > timezone.now()
+        deadline = timezone.now() - timedelta(minutes=PAYMENT_MINUTES)
+        return self.status == 'pending' and self.created_at < deadline
 
     @property
     def is_round_trip(self):
         return self.return_flight_id is not None
 
+    @property
+    def is_checked_in(self):
+        for p in self.passengers.all():
+            if not p.checked_in:
+                return False
+        return True
+
+    @property
+    def can_check_in(self):
+        return self.status == 'active' and self.flight.departure_time > timezone.now()
+
     def outbound_passengers(self):
-        return [p for p in self.passengers.all() if p.flight_id == self.flight_id]
+        return self.passengers.filter(flight_id=self.flight_id)
 
     def return_passengers(self):
-        return [p for p in self.passengers.all() if p.flight_id == self.return_flight_id]
+        return self.passengers.filter(flight_id=self.return_flight_id)
 
 
 class Passenger(models.Model):
@@ -268,14 +281,18 @@ class Passenger(models.Model):
         return f'{self.first_name} {self.last_name} ({self.seat})'
 
     def baggage_lines(self):
-        """ბილეთზე საჩვენებელი ბარგი: შეტანილი + ნაყიდი."""
+        """ბილეთზე საჩვენებელი ბარგი: რაც შედის + რაც დამატებით იყიდა."""
         bag = self.flight.baggage(self.booking.cabin)
-        cabin_bags = bag['cabin_bags'] or (1 if self.extra_cabin_bag else 0)
+
+        cabin_bags = bag['cabin_bags']
+        if cabin_bags == 0 and self.extra_cabin_bag:
+            cabin_bags = 1
         checked = bag['checked_bags'] + self.extra_checked_bags
-        lines = [f'🎒 პირადი ნივთი ({Flight.PERSONAL_ITEM_SIZE})']
-        if cabin_bags:
+
+        lines = [f'🎒 პირადი ნივთი ({PERSONAL_ITEM_SIZE})']
+        if cabin_bags > 0:
             lines.append(f'🧳 ხელბარგი {cabin_bags} × {bag["cabin_kg"]} კგ')
-        if checked:
+        if checked > 0:
             lines.append(f'🛄 ჩემოდანი {checked} × {bag["checked_kg"]} კგ')
         return lines
 

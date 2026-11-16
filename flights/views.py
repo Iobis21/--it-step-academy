@@ -2,58 +2,73 @@ from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import CheckInForm, FlightSearchForm, PaymentForm
-from .models import Booking, Favorite, Flight, Passenger
+from .models import (
+    MAX_EXTRA_CHECKED, PAYMENT_MINUTES, PERSONAL_ITEM_SIZE,
+    Booking, Favorite, Flight, Passenger, all_seats,
+)
 
 MAX_PASSENGERS = 6
 
 
-def _upcoming():
-    return Flight.objects.select_related('airline', 'origin', 'destination').filter(
-        departure_time__gt=timezone.now()
-    )
+def upcoming_flights():
+    """მომავალი ფრენები (უკვე შესრულებულები არ გვაინტერესებს)."""
+    return Flight.objects.filter(departure_time__gt=timezone.now())
 
+
+def get_cabin(value):
+    if value == 'business':
+        return 'business'
+    return 'economy'
+
+
+# ===================== მთავარი და ძიება =====================
 
 def home(request):
-    cheapest = _upcoming().order_by('economy_price')[:6]
+    cheapest = upcoming_flights().order_by('economy_price')[:6]
     return render(request, 'flights/home.html', {'form': FlightSearchForm(), 'flights': cheapest})
-
-
-def _cabin(value):
-    return 'business' if value == 'business' else 'economy'
 
 
 def search(request):
     form = FlightSearchForm(request.GET or None)
-    flights = _upcoming()
-    cabin = _cabin(request.GET.get('cabin'))
-    link_suffix = f'?cabin={cabin}'
+    flights = upcoming_flights()
+    cabin = get_cabin(request.GET.get('cabin'))
+    link_suffix = '?cabin=' + cabin
+
     if form.is_valid():
-        d = form.cleaned_data
-        if d['origin']:
-            flights = flights.filter(origin=d['origin'])
-        if d['destination']:
-            flights = flights.filter(destination=d['destination'])
-        if d['date']:
-            flights = flights.filter(departure_time__date=d['date'])
-        if d['airline']:
-            flights = flights.filter(airline=d['airline'])
-        price_field = f'{cabin}_price'
-        if d['max_price']:
-            flights = flights.filter(**{f'{price_field}__lte': d['max_price']})
-        if d['direct_only']:
+        data = form.cleaned_data
+        if data['origin']:
+            flights = flights.filter(origin=data['origin'])
+        if data['destination']:
+            flights = flights.filter(destination=data['destination'])
+        if data['date']:
+            flights = flights.filter(departure_time__date=data['date'])
+        if data['airline']:
+            flights = flights.filter(airline=data['airline'])
+        if data['direct_only']:
             flights = flights.filter(stops=0)
-        sort = (d['sort'] or 'departure_time').replace('economy_price', price_field)
+
+        # ფასის ფილტრი და დალაგება არჩეული კლასის ფასით
+        if data['max_price']:
+            if cabin == 'business':
+                flights = flights.filter(business_price__lte=data['max_price'])
+            else:
+                flights = flights.filter(economy_price__lte=data['max_price'])
+
+        sort = data['sort'] or 'departure_time'
+        if cabin == 'business':
+            sort = sort.replace('economy_price', 'business_price')
         flights = flights.order_by(sort)
-        if d['trip_type'] == FlightSearchForm.RETURN:
-            link_suffix += f'&return_date={d["return_date"].isoformat()}'
+
+        if data['trip_type'] == 'return':
+            link_suffix += '&return_date=' + data['return_date'].isoformat()
     elif form.is_bound:
         flights = flights.none()
+
     return render(request, 'flights/search.html', {
         'form': form,
         'flights': flights,
@@ -63,74 +78,157 @@ def search(request):
     })
 
 
-def _return_options(flight, return_date):
-    """დაბრუნების ფრენები არჩეულ თარიღზე; თუ არ არის — ±3 დღის ფარგლებში."""
-    base = _upcoming().filter(
+# ===================== ფრენის გვერდი =====================
+
+def find_return_flights(flight, return_date):
+    """დაბრუნების ფრენები არჩეულ დღეს. თუ არ არის — ახლო დღეებში (±3 დღე)."""
+    flights = upcoming_flights().filter(
         origin=flight.destination,
         destination=flight.origin,
         departure_time__gt=flight.arrival_time,
-    )
-    exact = base.filter(departure_time__date=return_date).order_by('departure_time')
-    if exact.exists():
-        return exact, True
-    nearby = base.filter(
-        departure_time__date__range=(return_date - timedelta(days=3), return_date + timedelta(days=3))
     ).order_by('departure_time')
-    return nearby, False
+
+    same_day = flights.filter(departure_time__date=return_date)
+    if same_day.exists():
+        return same_day, True
+
+    start = return_date - timedelta(days=3)
+    end = return_date + timedelta(days=3)
+    return flights.filter(departure_time__date__range=(start, end)), False
 
 
 def flight_detail(request, pk):
-    flight = get_object_or_404(Flight.objects.select_related('airline', 'origin', 'destination'), pk=pk)
-    cabin = _cabin(request.GET.get('cabin'))
-    # ორმხრივზე ბარგის პირობები ორივე ფრენის ავიაკომპანიას ეხება — ვაჩვენებთ წასვლის ფრენისას
+    flight = get_object_or_404(Flight, pk=pk)
+    cabin = get_cabin(request.GET.get('cabin'))
+
+    is_favorite = False
+    if request.user.is_authenticated:
+        is_favorite = Favorite.objects.filter(user=request.user, flight=flight).exists()
+
     context = {
         'flight': flight,
         'cabin': cabin,
         'bag_eco': flight.baggage('economy'),
         'bag_bus': flight.baggage('business'),
-        'personal_item_size': Flight.PERSONAL_ITEM_SIZE,
-        'max_extra_checked': Flight.MAX_EXTRA_CHECKED,
+        'personal_item_size': PERSONAL_ITEM_SIZE,
+        'max_extra_checked': MAX_EXTRA_CHECKED,
         'seat_map': flight.seat_map(),
         'max_passengers': MAX_PASSENGERS,
-        'is_favorite': request.user.is_authenticated
-        and Favorite.objects.filter(user=request.user, flight=flight).exists(),
+        'is_favorite': is_favorite,
     }
 
     return_id = request.GET.get('return')
     return_date = request.GET.get('return_date')
+
     if return_id:
-        return_flight = get_object_or_404(Flight.objects.select_related('airline', 'origin', 'destination'), pk=return_id)
+        # ორმხრივი: დაბრუნების ფრენა უკვე არჩეულია
+        return_flight = get_object_or_404(Flight, pk=return_id)
         if not return_flight.is_valid_return_for(flight):
             messages.error(request, 'ეს დაბრუნების ფრენა არ შეესაბამება მარშრუტს')
             return redirect('flight_detail', pk=pk)
         context['return_flight'] = return_flight
         context['return_seat_map'] = return_flight.seat_map()
+
     elif return_date:
+        # ორმხრივი: ჯერ დაბრუნების ფრენა უნდა აირჩიოს
         try:
-            parsed = date.fromisoformat(return_date)
+            return_date = date.fromisoformat(return_date)
         except ValueError:
             return redirect('flight_detail', pk=pk)
-        options, exact = _return_options(flight, parsed)
-        context.update({
-            'choosing_return': True,
-            'return_date': parsed,
-            'return_options': options,
-            'return_exact': exact,
-            'link_base': f'/flights/{flight.pk}/?cabin={cabin}&return=',
-        })
+        options, exact = find_return_flights(flight, return_date)
+        context['choosing_return'] = True
+        context['return_date'] = return_date
+        context['return_options'] = options
+        context['return_exact'] = exact
+        context['link_base'] = f'/flights/{flight.pk}/?cabin={cabin}&return='
+
     return render(request, 'flights/flight_detail.html', context)
 
 
-def _collect_passengers(request, seats):
+# ===================== დაჯავშნა =====================
+
+def read_passengers(request, seats):
+    """ფორმიდან მგზავრების მონაცემების წაკითხვა. თუ რამე აკლია — აბრუნებს None-ს."""
     passengers = []
-    for s in seats:
-        first = request.POST.get(f'first_name_{s}', '').strip()
-        last = request.POST.get(f'last_name_{s}', '').strip()
-        passport = request.POST.get(f'passport_{s}', '').strip()
-        if not (first and last and passport):
+    for seat in seats:
+        first_name = request.POST.get('first_name_' + seat, '').strip()
+        last_name = request.POST.get('last_name_' + seat, '').strip()
+        passport = request.POST.get('passport_' + seat, '').strip()
+        if not first_name or not last_name or not passport:
             return None
-        passengers.append((first, last, passport))
+
+        try:
+            checked = int(request.POST.get('checked_' + seat) or 0)
+        except ValueError:
+            checked = 0
+        if checked < 0 or checked > MAX_EXTRA_CHECKED:
+            return None
+
+        passengers.append({
+            'first_name': first_name,
+            'last_name': last_name,
+            'passport': passport,
+            'cabin_bag': request.POST.get('cabin_bag_' + seat) == '1',
+            'checked': checked,
+        })
     return passengers
+
+
+def check_seats(flight, return_flight, seats, return_seats):
+    """ადგილების შემოწმება. აბრუნებს (კლასი, შეცდომა)."""
+    if not seats:
+        return None, 'აირჩიე მინიმუმ ერთი ადგილი'
+    if len(seats) > MAX_PASSENGERS or len(set(seats)) != len(seats):
+        return None, f'ერთ ჯავშანზე მაქსიმუმ {MAX_PASSENGERS} მგზავრია'
+
+    valid_seats = all_seats()
+    for seat in seats + return_seats:
+        if seat not in valid_seats:
+            return None, 'ასეთი ადგილი თვითმფრინავში არ არსებობს'
+
+    cabins = set()
+    for seat in seats:
+        cabins.add(flight.cabin_of(seat))
+
+    if return_flight:
+        if not return_flight.is_valid_return_for(flight):
+            return None, 'დაბრუნების ფრენა არ შეესაბამება მარშრუტს'
+        if len(return_seats) != len(seats) or len(set(return_seats)) != len(return_seats):
+            return None, 'დაბრუნების ფრენაზეც იმდენივე ადგილი აირჩიე, რამდენი მგზავრიცაა'
+        for seat in return_seats:
+            cabins.add(return_flight.cabin_of(seat))
+
+    if len(cabins) != 1:
+        return None, 'ყველა ადგილი ერთი კლასიდან უნდა იყოს'
+
+    # დაკავებული ხომ არ არის?
+    taken = flight.taken_seats()
+    for seat in seats:
+        if seat in taken:
+            return None, f'ადგილი {seat} უკვე დაკავებულია, აირჩიე სხვა'
+    if return_flight:
+        taken = return_flight.taken_seats()
+        for seat in return_seats:
+            if seat in taken:
+                return None, f'დაბრუნების ფრენაზე ადგილი {seat} უკვე დაკავებულია'
+
+    return cabins.pop(), None
+
+
+def save_passengers(booking, flight, seats, passengers, cabin):
+    for seat, p in zip(seats, passengers):
+        # ხელბარგს ვინახავთ მხოლოდ თუ ბილეთში არ შედის (მაშინ ფასიანია)
+        cabin_bag = p['cabin_bag'] and flight.baggage(cabin)['cabin_bags'] == 0
+        Passenger.objects.create(
+            booking=booking,
+            flight=flight,
+            seat=seat,
+            first_name=p['first_name'],
+            last_name=p['last_name'],
+            passport=p['passport'],
+            extra_cabin_bag=cabin_bag,
+            extra_checked_bags=p['checked'],
+        )
 
 
 @login_required
@@ -139,136 +237,104 @@ def book(request, pk):
     flight = get_object_or_404(Flight, pk=pk)
     seats = request.POST.getlist('seat')
     return_seats = request.POST.getlist('return_seat')
+
     return_flight = None
     if request.POST.get('return_flight'):
         return_flight = get_object_or_404(Flight, pk=request.POST['return_flight'])
 
-    back_url = f'/flights/{pk}/?cabin={_cabin(request.POST.get("cabin"))}' + (
-        f'&return={return_flight.pk}' if return_flight else ''
-    )
-
-    def fail(msg):
-        messages.error(request, msg)
-        return redirect(back_url)
+    # შეცდომის შემთხვევაში ამავე გვერდზე ვბრუნდებით
+    back_url = f'/flights/{pk}/?cabin=' + get_cabin(request.POST.get('cabin'))
+    if return_flight:
+        back_url += f'&return={return_flight.pk}'
 
     if flight.departure_time <= timezone.now():
-        return fail('ეს ფრენა უკვე შესრულდა')
-    if not seats:
-        return fail('აირჩიე მინიმუმ ერთი ადგილი')
-    if len(seats) > MAX_PASSENGERS or len(set(seats)) != len(seats):
-        return fail(f'ერთ ჯავშანზე მაქსიმუმ {MAX_PASSENGERS} მგზავრია')
-    if not set(seats + return_seats) <= Flight.all_seats():
-        return fail('ასეთი ადგილი თვითმფრინავში არ არსებობს')
+        messages.error(request, 'ეს ფრენა უკვე შესრულდა')
+        return redirect(back_url)
 
-    cabins = {flight.cabin_of(s) for s in seats}
-    if return_flight:
-        if not return_flight.is_valid_return_for(flight):
-            return fail('დაბრუნების ფრენა არ შეესაბამება მარშრუტს')
-        if len(return_seats) != len(seats) or len(set(return_seats)) != len(return_seats):
-            return fail('დაბრუნების ფრენაზეც იმდენივე ადგილი აირჩიე, რამდენი მგზავრიცაა')
-        cabins |= {return_flight.cabin_of(s) for s in return_seats}
-    if len(cabins) != 1:
-        return fail('ყველა ადგილი ერთი კლასიდან უნდა იყოს')
-    cabin = cabins.pop()
+    cabin, error = check_seats(flight, return_flight, seats, return_seats)
+    if error:
+        messages.error(request, error)
+        return redirect(back_url)
 
-    passengers = _collect_passengers(request, seats)
+    passengers = read_passengers(request, seats)
     if passengers is None:
-        return fail('შეავსე ყველა მგზავრის მონაცემები')
+        messages.error(request, 'შეავსე ყველა მგზავრის მონაცემები სწორად')
+        return redirect(back_url)
 
-    # დამატებითი ბარგი თითოეულ მგზავრზე (ორმხრივზე ორივე ფრენას ეხება)
-    legs = [flight] + ([return_flight] if return_flight else [])
-    extras = []
-    for s in seats:
-        try:
-            checked = int(request.POST.get(f'checked_{s}', 0) or 0)
-        except ValueError:
-            checked = 0
-        if not 0 <= checked <= Flight.MAX_EXTRA_CHECKED:
-            return fail(f'დამატებითი ჩემოდანი მაქსიმუმ {Flight.MAX_EXTRA_CHECKED} ცალი')
-        extras.append((request.POST.get(f'cabin_bag_{s}') == '1', checked))
-    baggage_total = sum(
-        leg.extras_price(cabin, cabin_bag, checked) for leg in legs for cabin_bag, checked in extras
+    # ფასის დათვლა: ბილეთები + დამატებითი ბარგი
+    flights = [flight]
+    if return_flight:
+        flights.append(return_flight)
+
+    ticket_price = 0
+    baggage_price = 0
+    for f in flights:
+        ticket_price += f.price_for(cabin) * len(seats)
+        for p in passengers:
+            baggage_price += f.extras_price(cabin, p['cabin_bag'], p['checked'])
+
+    booking = Booking.objects.create(
+        user=request.user,
+        flight=flight,
+        return_flight=return_flight,
+        cabin=cabin,
+        total_price=ticket_price + baggage_price,
+        baggage_price=baggage_price,
+        status='pending',
     )
+    save_passengers(booking, flight, seats, passengers, cabin)
+    if return_flight:
+        save_passengers(booking, return_flight, return_seats, passengers, cabin)
 
-    total = sum(leg.price_for(cabin) for leg in legs) * len(seats) + baggage_total
-
-    with transaction.atomic():
-        if flight.taken_seats() & set(seats):
-            return fail('არჩეული ადგილი უკვე დაკავებულია, აირჩიე სხვა')
-        if return_flight and return_flight.taken_seats() & set(return_seats):
-            return fail('დაბრუნების ფრენაზე არჩეული ადგილი უკვე დაკავებულია')
-        booking = Booking.objects.create(
-            user=request.user, flight=flight, return_flight=return_flight, cabin=cabin,
-            total_price=total, baggage_price=baggage_total, status=Booking.Status.PENDING,
-        )
-
-        def make(leg, seat_list):
-            return [
-                Passenger(booking=booking, flight=leg, seat=s, first_name=f, last_name=l, passport=p,
-                          extra_cabin_bag=cabin_bag and leg.baggage(cabin)['cabin_bags'] == 0,
-                          extra_checked_bags=checked)
-                for s, (f, l, p), (cabin_bag, checked) in zip(seat_list, passengers, extras)
-            ]
-
-        rows = make(flight, seats)
-        if return_flight:
-            rows += make(return_flight, return_seats)
-        Passenger.objects.bulk_create(rows)
-
-    _allow_ticket(request, booking)
+    allow_ticket(request, booking)
     return redirect('pay', pnr=booking.pnr)
 
 
+# ===================== გადახდა =====================
+
 def pay(request, pnr):
-    booking = _ticket_booking(request, pnr)
+    booking = get_ticket(request, pnr)
     if booking is None:
         return redirect('checkin')
-    if booking.status != Booking.Status.PENDING:
+    if booking.status != 'pending':
         return redirect('ticket', pnr=pnr)
+
     if booking.payment_expired:
-        booking.status = Booking.Status.CANCELLED
-        booking.save(update_fields=['status'])
-        messages.error(request, f'გადახდის დრო ({Booking.PAYMENT_MINUTES} წთ) ამოიწურა — ჯავშანი გაუქმდა, ადგილები გათავისუფლდა')
+        booking.status = 'cancelled'
+        booking.save()
+        messages.error(request, f'გადახდის დრო ({PAYMENT_MINUTES} წთ) ამოიწურა — ჯავშანი გაუქმდა')
         return redirect('flight_detail', pk=booking.flight_id)
 
     form = PaymentForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        with transaction.atomic():
-            # ჩაკეტვა, რომ ორჯერ არ გადაიხადოს
-            locked = Booking.objects.select_for_update().get(pk=booking.pk)
-            if locked.status == Booking.Status.PENDING:
-                locked.status = Booking.Status.ACTIVE
-                locked.paid_at = timezone.now()
-                locked.card_last4 = form.cleaned_data['card_number'][-4:]
-                locked.save(update_fields=['status', 'paid_at', 'card_last4'])
+        booking.status = 'active'
+        booking.paid_at = timezone.now()
+        booking.card_last4 = form.cleaned_data['card_number'][-4:]  # ვინახავთ მხოლოდ ბოლო 4 ციფრს
+        booking.save()
         messages.success(request, f'გადახდა წარმატებულია! ბილეთის ნომერი: {booking.pnr}')
         return redirect('ticket', pnr=pnr)
 
-    deadline = booking.created_at + timedelta(minutes=Booking.PAYMENT_MINUTES)
+    deadline = booking.created_at + timedelta(minutes=PAYMENT_MINUTES)
     return render(request, 'flights/pay.html', {'booking': booking, 'form': form, 'deadline': deadline})
 
 
-# ===== ონლაინ რეგისტრაცია (check-in) და ბილეთის ნახვა =====
+# ===================== ბილეთი: ნახვა, რეგისტრაცია, დაბრუნება =====================
 
-def _allow_ticket(request, booking):
-    allowed = set(request.session.get('tickets', []))
-    allowed.add(booking.pnr)
-    request.session['tickets'] = sorted(allowed)
+def allow_ticket(request, booking):
+    """სესიაში ვიმახსოვრებთ, რომ ამ ბილეთის ნახვის უფლება აქვს."""
+    tickets = request.session.get('tickets', [])
+    if booking.pnr not in tickets:
+        tickets.append(booking.pnr)
+    request.session['tickets'] = tickets
 
 
-def _ticket_booking(request, pnr):
-    """ბილეთის ნახვა შეუძლია მფლობელს ან მას, ვინც კოდი + გვარი სწორად შეიყვანა."""
-    booking = get_object_or_404(
-        Booking.objects.select_related(
-            'user', 'flight__airline', 'flight__origin', 'flight__destination',
-            'return_flight__airline', 'return_flight__origin', 'return_flight__destination',
-        ).prefetch_related('passengers'),
-        pnr=pnr,
-    )
-    is_owner = request.user.is_authenticated and booking.user_id == request.user.id
-    if not (is_owner or pnr in request.session.get('tickets', [])):
-        return None
-    return booking
+def get_ticket(request, pnr):
+    """ბილეთს ხედავს მფლობელი, ან ვინც ბილეთის ნომერი + გვარი სწორად შეიყვანა."""
+    booking = get_object_or_404(Booking, pnr=pnr)
+    is_owner = request.user.is_authenticated and booking.user == request.user
+    if is_owner or pnr in request.session.get('tickets', []):
+        return booking
+    return None
 
 
 def checkin(request):
@@ -279,19 +345,20 @@ def checkin(request):
             passengers__last_name__iexact=form.cleaned_data['last_name'].strip(),
         ).first()
         if booking:
-            _allow_ticket(request, booking)
+            allow_ticket(request, booking)
             return redirect('ticket', pnr=booking.pnr)
-        form.add_error(None, 'ჯავშანი ვერ მოიძებნა. შეამოწმე ჯავშნის კოდი და გვარი.')
+        form.add_error(None, 'ბილეთი ვერ მოიძებნა. შეამოწმე ბილეთის ნომერი და გვარი.')
     return render(request, 'flights/checkin.html', {'form': form})
 
 
 def ticket(request, pnr):
-    booking = _ticket_booking(request, pnr)
+    booking = get_ticket(request, pnr)
     if booking is None:
         messages.error(request, 'ბილეთის სანახავად შეიყვანე ბილეთის ნომერი და გვარი')
         return redirect('checkin')
-    if booking.status == Booking.Status.PENDING:
+    if booking.status == 'pending':
         return redirect('pay', pnr=pnr)
+
     legs = [(booking.flight, booking.outbound_passengers())]
     if booking.return_flight:
         legs.append((booking.return_flight, booking.return_passengers()))
@@ -300,42 +367,45 @@ def ticket(request, pnr):
 
 @require_POST
 def do_checkin(request, pnr):
-    booking = _ticket_booking(request, pnr)
+    booking = get_ticket(request, pnr)
     if booking is None:
         return redirect('checkin')
-    if not booking.can_check_in:
-        messages.error(request, 'ამ ჯავშანზე რეგისტრაცია შეუძლებელია (გაუქმებულია ან ფრენა შესრულდა)')
-    else:
+    if booking.can_check_in:
         booking.passengers.update(checked_in=True)
         messages.success(request, 'რეგისტრაცია გავლილია! ჩასხდომის ბილეთი მზადაა ✈')
+    else:
+        messages.error(request, 'ამ ჯავშანზე რეგისტრაცია შეუძლებელია (გაუქმებულია ან ფრენა შესრულდა)')
     return redirect('ticket', pnr=pnr)
 
 
 @require_POST
 def cancel_ticket(request, pnr):
-    """ბილეთის დაბრუნება — ბილეთის ნომრით (მფლობელს ან ვინც ნომერი + გვარი შეიყვანა)."""
-    booking = _ticket_booking(request, pnr)
+    """ბილეთის დაბრუნება ბილეთის ნომრით."""
+    booking = get_ticket(request, pnr)
     if booking is None:
         return redirect('checkin')
-    if booking.status == Booking.Status.CANCELLED:
+
+    if booking.status == 'cancelled':
         messages.info(request, 'ბილეთი უკვე გაუქმებულია')
     elif booking.flight.departure_time <= timezone.now():
         messages.error(request, 'შესრულებული ფრენის ბილეთის დაბრუნება შეუძლებელია')
     else:
-        booking.status = Booking.Status.CANCELLED
-        booking.save(update_fields=['status'])
+        booking.status = 'cancelled'
+        booking.save()
         messages.info(request, f'ბილეთი {booking.pnr} გაუქმდა. თანხა ({booking.total_price:.0f} ₾) დაგიბრუნდებათ ბარათზე.')
     return redirect('ticket', pnr=pnr)
 
+
+# ===================== პროფილი =====================
 
 @login_required
 @require_POST
 def cancel_booking(request, pk):
     booking = get_object_or_404(Booking, pk=pk, user=request.user)
-    if booking.status in (Booking.Status.ACTIVE, Booking.Status.PENDING):
-        booking.status = Booking.Status.CANCELLED
-        booking.save(update_fields=['status'])
-        messages.info(request, f'ჯავშანი #{booking.pk} გაუქმდა')
+    if booking.status != 'cancelled':
+        booking.status = 'cancelled'
+        booking.save()
+        messages.info(request, f'ჯავშანი {booking.pnr} გაუქმდა')
     return redirect('profile')
 
 
@@ -343,19 +413,16 @@ def cancel_booking(request, pk):
 @require_POST
 def toggle_favorite(request, pk):
     flight = get_object_or_404(Flight, pk=pk)
-    fav, created = Favorite.objects.get_or_create(user=request.user, flight=flight)
-    if not created:
-        fav.delete()
+    favorite = Favorite.objects.filter(user=request.user, flight=flight).first()
+    if favorite:
+        favorite.delete()
+    else:
+        Favorite.objects.create(user=request.user, flight=flight)
     return redirect('flight_detail', pk=pk)
 
 
 @login_required
 def profile(request):
-    related = ['airline', 'origin', 'destination']
-    bookings = (
-        request.user.bookings
-        .select_related(*[f'flight__{r}' for r in related], *[f'return_flight__{r}' for r in related])
-        .prefetch_related('passengers')
-    )
-    favorites = _upcoming().filter(favorited_by__user=request.user)
+    bookings = Booking.objects.filter(user=request.user)
+    favorites = upcoming_flights().filter(favorited_by__user=request.user)
     return render(request, 'flights/profile.html', {'bookings': bookings, 'favorites': favorites})
