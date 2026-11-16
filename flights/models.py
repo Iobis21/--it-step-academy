@@ -56,6 +56,14 @@ class Flight(models.Model):
     def duration_minutes(self):
         return int((self.arrival_time - self.departure_time).total_seconds() // 60)
 
+    def is_valid_return_for(self, outbound):
+        """შეიძლება თუ არა ეს ფრენა იყოს `outbound`-ის დაბრუნების ფრენა."""
+        return (
+            self.origin_id == outbound.destination_id
+            and self.destination_id == outbound.origin_id
+            and self.departure_time > outbound.arrival_time
+        )
+
     @property
     def duration_display(self):
         h, m = divmod(self.duration_minutes, 60)
@@ -104,6 +112,10 @@ class Booking(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bookings')
     flight = models.ForeignKey(Flight, on_delete=models.PROTECT, related_name='bookings')
+    return_flight = models.ForeignKey(
+        Flight, on_delete=models.PROTECT, related_name='return_bookings',
+        null=True, blank=True, verbose_name='დაბრუნების ფრენა',
+    )
     cabin = models.CharField('კლასი', max_length=10, choices=Cabin.choices)
     total_price = models.DecimalField('ჯამური ფასი', max_digits=10, decimal_places=2)
     status = models.CharField('სტატუსი', max_length=10, choices=Status.choices, default=Status.ACTIVE)
@@ -116,6 +128,16 @@ class Booking(models.Model):
 
     def __str__(self):
         return f'#{self.pk} {self.user} — {self.flight}'
+
+    @property
+    def is_round_trip(self):
+        return self.return_flight_id is not None
+
+    def outbound_passengers(self):
+        return [p for p in self.passengers.all() if p.flight_id == self.flight_id]
+
+    def return_passengers(self):
+        return [p for p in self.passengers.all() if p.flight_id == self.return_flight_id]
 
 
 class Passenger(models.Model):

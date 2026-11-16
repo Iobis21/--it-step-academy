@@ -1,0 +1,13 @@
+<div class="seat-map" data-leg="{{ leg }}" data-economy="{{ f.economy_price }}" data-business="{{ f.business_price }}">
+  {% for row, is_business, seats in map %}
+    <div class="seat-row{% if is_business %} business{% endif %}">
+      <span class="row-num">{{ row }}</span>
+      {% for seat, taken in seats %}
+        {% if forloop.counter == 4 %}<span class="aisle"></span>{% endif %}
+        <button type="button" class="seat{% if taken %} taken{% endif %}"
+                data-seat="{{ seat }}" data-cabin="{% if is_business %}business{% else %}economy{% endif %}"
+                {% if taken %}disabled{% endif %}>{{ seat|slice:"-1:" }}</button>
+      {% endfor %}
+    </div>
+  {% endfor %}
+</div>

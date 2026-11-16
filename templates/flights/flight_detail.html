@@ -4,8 +4,8 @@
 {% block content %}
 <div class="detail-hero" style="background-image: url('{{ flight.destination.image_url }}')">
   <div>
-    <h1>{{ flight.origin.name }} → {{ flight.destination.name }}</h1>
-    <p>{{ flight.airline.name }} · {{ flight.flight_number }}</p>
+    <h1>{{ flight.origin.name }} {% if return_flight or choosing_return %}⇄{% else %}→{% endif %} {{ flight.destination.name }}</h1>
+    <p>{{ flight.airline.name }} · {{ flight.flight_number }}{% if return_flight or choosing_return %} · ორმხრივი{% endif %}</p>
   </div>
   {% if user.is_authenticated %}
     <form method="post" action="{% url 'toggle_favorite' flight.pk %}">
@@ -15,45 +15,77 @@
   {% endif %}
 </div>
 
-<form method="post" action="{% url 'book' flight.pk %}" id="booking-form" class="detail-layout"
-      data-economy="{{ flight.economy_price }}" data-business="{{ flight.business_price }}"
-      data-max="{{ max_passengers }}">
-  {% csrf_token %}
-  <section class="card">
-    <h3>ფრენის ინფორმაცია</h3>
-    <ul class="info">
-      <li><span>გაფრენა</span><b>{{ flight.departure_time|date:"d.m.Y H:i" }}</b></li>
-      <li><span>ჩაფრენა</span><b>{{ flight.arrival_time|date:"d.m.Y H:i" }}</b></li>
-      <li><span>ხანგრძლივობა</span><b>{{ flight.duration_display }}</b></li>
-      <li><span>გადაჯდომა</span><b>{% if flight.stops %}{{ flight.stops }}{% else %}პირდაპირი{% endif %}</b></li>
-      <li><span>თავისუფალი ადგილი</span><b>{{ flight.seats_left }} / {{ flight.seats_total }}</b></li>
-      <li><span>ეკონომი</span><b>{{ flight.economy_price|floatformat:0 }} ₾</b></li>
-      <li><span>ბიზნესი</span><b>{{ flight.business_price|floatformat:0 }} ₾</b></li>
-    </ul>
+{% if return_flight or choosing_return %}
+  <div class="steps">
+    <span class="step done">1. წასვლის ფრენა ✓</span>
+    <span class="step {% if choosing_return %}active{% else %}done{% endif %}">2. დაბრუნების ფრენა{% if return_flight %} ✓{% endif %}</span>
+    <span class="step {% if return_flight %}active{% endif %}">3. ადგილები და მგზავრები</span>
+  </div>
+{% endif %}
 
-    <h3>აირჩიე ადგილი</h3>
-    <p class="muted">პირველი 2 რიგი — ბიზნეს კლასი. ერთ ჯავშანში ადგილები ერთი კლასიდან უნდა იყოს.</p>
-    <div class="seat-map">
-      {% for row, is_business, seats in seat_map %}
-        <div class="seat-row{% if is_business %} business{% endif %}">
-          <span class="row-num">{{ row }}</span>
-          {% for seat, taken in seats %}
-            {% if forloop.counter == 4 %}<span class="aisle"></span>{% endif %}
-            <button type="button" class="seat{% if taken %} taken{% endif %}"
-                    data-seat="{{ seat }}" data-cabin="{% if is_business %}business{% else %}economy{% endif %}"
-                    {% if taken %}disabled{% endif %}>{{ seat|slice:"-1:" }}</button>
-          {% endfor %}
-        </div>
+{% if choosing_return %}
+  <section class="card">
+    <h3>აირჩიე დაბრუნების ფრენა: {{ flight.destination.name }} → {{ flight.origin.name }}</h3>
+    {% if not return_exact and return_options %}
+      <p class="muted">{{ return_date|date:"d.m.Y" }}-ში ფრენა არ არის — გაჩვენებთ ახლო თარიღებს (±3 დღე).</p>
+    {% endif %}
+    <div class="grid">
+      {% for flight in return_options %}
+        {% include 'partials/flight_card.html' %}
+      {% empty %}
+        <p class="muted">ამ მიმართულებით დაბრუნების ფრენა ვერ მოიძებნა.
+          <a href="{% url 'flight_detail' flight.pk %}">დაჯავშნე მხოლოდ ცალმხრივი</a></p>
       {% endfor %}
     </div>
+  </section>
+{% else %}
+
+<form method="post" action="{% url 'book' flight.pk %}" id="booking-form" class="detail-layout"
+      data-max="{{ max_passengers }}">
+  {% csrf_token %}
+  {% if return_flight %}<input type="hidden" name="return_flight" value="{{ return_flight.pk }}">{% endif %}
+  <div class="legs">
+    <section class="card">
+      <h3>{% if return_flight %}✈ წასვლა: {% endif %}{{ flight.origin.name }} → {{ flight.destination.name }}</h3>
+      <ul class="info">
+        <li><span>ავიაკომპანია</span><b>{{ flight.airline.name }} · {{ flight.flight_number }}</b></li>
+        <li><span>გაფრენა</span><b>{{ flight.departure_time|date:"d.m.Y H:i" }}</b></li>
+        <li><span>ჩაფრენა</span><b>{{ flight.arrival_time|date:"d.m.Y H:i" }}</b></li>
+        <li><span>ხანგრძლივობა</span><b>{{ flight.duration_display }}</b></li>
+        <li><span>გადაჯდომა</span><b>{% if flight.stops %}{{ flight.stops }}{% else %}პირდაპირი{% endif %}</b></li>
+        <li><span>თავისუფალი ადგილი</span><b>{{ flight.seats_left }} / {{ flight.seats_total }}</b></li>
+        <li><span>ეკონომი / ბიზნესი</span><b>{{ flight.economy_price|floatformat:0 }} ₾ / {{ flight.business_price|floatformat:0 }} ₾</b></li>
+      </ul>
+      <h3>აირჩიე ადგილი</h3>
+      <p class="muted">პირველი 2 რიგი — ბიზნეს კლასი. ყველა ადგილი ერთი კლასიდან უნდა იყოს.</p>
+      {% include 'partials/seat_map.html' with leg='out' f=flight map=seat_map %}
+    </section>
+
+    {% if return_flight %}
+      <section class="card">
+        <h3>↩ დაბრუნება: {{ return_flight.origin.name }} → {{ return_flight.destination.name }}</h3>
+        <ul class="info">
+          <li><span>ავიაკომპანია</span><b>{{ return_flight.airline.name }} · {{ return_flight.flight_number }}</b></li>
+          <li><span>გაფრენა</span><b>{{ return_flight.departure_time|date:"d.m.Y H:i" }}</b></li>
+          <li><span>ჩაფრენა</span><b>{{ return_flight.arrival_time|date:"d.m.Y H:i" }}</b></li>
+          <li><span>ხანგრძლივობა</span><b>{{ return_flight.duration_display }}</b></li>
+          <li><span>ეკონომი / ბიზნესი</span><b>{{ return_flight.economy_price|floatformat:0 }} ₾ / {{ return_flight.business_price|floatformat:0 }} ₾</b></li>
+        </ul>
+        <h3>აირჩიე ადგილი დაბრუნებისთვის</h3>
+        <p class="muted">იმდენივე ადგილი აირჩიე, რამდენიც წასვლისთვის.</p>
+        {% include 'partials/seat_map.html' with leg='ret' f=return_flight map=return_seat_map %}
+        <p><a href="{% url 'flight_detail' flight.pk %}?return_date={{ return_flight.departure_time|date:'Y-m-d' }}">სხვა დაბრუნების ფრენის არჩევა</a></p>
+      </section>
+    {% endif %}
+
     <div class="legend">
       <span><i class="seat"></i> თავისუფალი</span>
       <span><i class="seat selected"></i> არჩეული</span>
       <span><i class="seat taken"></i> დაკავებული</span>
     </div>
-  </section>
+  </div>
 
-  <aside class="card">
+  <aside class="card booking-summary">
     <h3>მგზავრები</h3>
     <div id="passengers"><p class="muted">აირჩიე ადგილი სქემაზე</p></div>
     <div class="total"><span>სულ:</span><b id="total">0 ₾</b></div>
@@ -61,10 +93,11 @@
     {% if user.is_authenticated %}
       <button class="btn btn-block" id="book-btn" disabled>დაჯავშნა</button>
     {% else %}
-      <a class="btn btn-block" href="{% url 'login' %}?next={{ request.path|urlencode }}">შედი დასაჯავშნად</a>
+      <a class="btn btn-block" href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}">შედი დასაჯავშნად</a>
     {% endif %}
   </aside>
 </form>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

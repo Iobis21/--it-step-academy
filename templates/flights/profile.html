@@ -13,12 +13,18 @@
 {% for b in bookings %}
   <div class="card booking{% if b.status == 'cancelled' %} cancelled{% endif %}">
     <div>
-      <h3><a href="{% url 'flight_detail' b.flight.pk %}">{{ b.flight.origin.name }} → {{ b.flight.destination.name }}</a></h3>
-      <p class="muted">{{ b.flight.airline.name }} · {{ b.flight.flight_number }} · {{ b.flight.departure_time|date:"d.m.Y H:i" }}</p>
-      <p>{{ b.get_cabin_display }} · ჯავშანი #{{ b.pk }}</p>
+      <h3><a href="{% url 'flight_detail' b.flight.pk %}">{{ b.flight.origin.name }} {% if b.is_round_trip %}⇄{% else %}→{% endif %} {{ b.flight.destination.name }}</a></h3>
+      <p>{% if b.is_round_trip %}ორმხრივი{% else %}ცალმხრივი{% endif %} · {{ b.get_cabin_display }} · ჯავშანი #{{ b.pk }}</p>
+      <p class="muted">{% if b.is_round_trip %}✈ წასვლა: {% endif %}{{ b.flight.airline.name }} · {{ b.flight.flight_number }} · {{ b.flight.departure_time|date:"d.m.Y H:i" }}</p>
+      {% if b.is_round_trip %}
+        <p class="muted">↩ დაბრუნება: {{ b.return_flight.airline.name }} · {{ b.return_flight.flight_number }} · {{ b.return_flight.departure_time|date:"d.m.Y H:i" }}</p>
+      {% endif %}
       <ul class="passenger-list">
-        {% for p in b.passengers.all %}<li>{{ p.seat }} — {{ p.first_name }} {{ p.last_name }}</li>{% endfor %}
+        {% for p in b.outbound_passengers %}<li>{{ p.first_name }} {{ p.last_name }} — ადგილი {{ p.seat }}</li>{% endfor %}
       </ul>
+      {% if b.is_round_trip %}
+        <p class="muted">დაბრუნების ადგილები: {% for p in b.return_passengers %}{{ p.seat }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+      {% endif %}
     </div>
     <div class="booking-side">
       <b>{{ b.total_price|floatformat:0 }} ₾</b>

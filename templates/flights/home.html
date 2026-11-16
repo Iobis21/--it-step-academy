@@ -1,14 +1,20 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}მთავარი{% endblock %}
 {% block content %}
 <section class="hero">
   <h1>იპოვე და დაჯავშნე ფრენა წამებში</h1>
   <p>საუკეთესო ფასები საქართველოდან და საქართველოში</p>
-  <form class="search-box" method="get" action="{% url 'search' %}">
-    {{ form.origin }}
-    {{ form.destination }}
-    {{ form.date }}
-    <button class="btn" type="submit">ძიება</button>
+  <form class="search-panel" method="get" action="{% url 'search' %}">
+    {% include 'partials/trip_toggle.html' %}
+    <div class="search-box">
+      {{ form.origin }}
+      <button type="button" class="swap" data-swap title="შეცვლა">⇄</button>
+      {{ form.destination }}
+      <label class="date-field">გაფრენა {{ form.date }}</label>
+      <label class="date-field" data-return-field>დაბრუნება {{ form.return_date }}</label>
+      <button class="btn" type="submit">ძიება</button>
+    </div>
   </form>
 </section>
 
@@ -20,4 +26,8 @@
     <p class="muted">ფრენები ჯერ არ არის. გაუშვი <code>python manage.py seed_flights</code></p>
   {% endfor %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/trip.js' %}"></script>
 {% endblock %}

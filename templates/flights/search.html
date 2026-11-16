@@ -1,16 +1,25 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}ძიება{% endblock %}
 {% block content %}
 <h1>ფრენების ძიება</h1>
 <div class="search-layout">
   <form class="card filters" method="get">
     <h3>ფილტრები</h3>
+    {% include 'partials/trip_toggle.html' %}
     {% include 'partials/form_fields.html' %}
     <button class="btn" type="submit">გაფილტვრა</button>
     <a class="btn btn-outline" href="{% url 'search' %}">გასუფთავება</a>
   </form>
 
   <section>
+    {% if is_return %}
+      <div class="steps">
+        <span class="step active">1. წასვლის ფრენა</span>
+        <span class="step">2. დაბრუნების ფრენა</span>
+        <span class="step">3. ადგილები და მგზავრები</span>
+      </div>
+    {% endif %}
     <div class="results-head">ნაპოვნია {{ flights|length }} ფრენა</div>
     <div class="grid">
       {% for flight in flights %}
@@ -21,4 +30,8 @@
     </div>
   </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/trip.js' %}"></script>
 {% endblock %}

@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
@@ -70,6 +72,51 @@ class BookingFlowTests(TestCase):
         b = Booking.objects.get()
         self.client.post(reverse('cancel_booking', args=[b.pk]))
         self.assertNotIn('4C', self.flight.taken_seats())
+
+    def _make_return(self):
+        f = self.flight
+        return Flight.objects.create(
+            flight_number='RT100', airline=f.airline, origin=f.destination, destination=f.origin,
+            departure_time=f.arrival_time + timedelta(days=3),
+            arrival_time=f.arrival_time + timedelta(days=3, hours=2),
+            economy_price=200, business_price=600,
+        )
+
+    def test_return_search_and_detail_pages(self):
+        ret = self._make_return()
+        d = ret.departure_time.date().isoformat()
+        r = self.client.get('/search/', {'trip_type': 'return', 'return_date': d})
+        self.assertContains(r, f'?return_date={d}')
+        r = self.client.get(f'/flights/{self.flight.pk}/', {'return_date': d})
+        self.assertContains(r, f'?return={ret.pk}')
+        r = self.client.get(f'/flights/{self.flight.pk}/', {'return': ret.pk})
+        self.assertContains(r, 'data-leg="ret"')
+
+    def test_return_requires_return_date(self):
+        r = self.client.get('/search/', {'trip_type': 'return'})
+        self.assertContains(r, 'მიუთითე დაბრუნების თარიღი')
+
+    def test_round_trip_booking(self):
+        ret = self._make_return()
+        self.login()
+        data = {'seat': ['3A', '3B'], 'return_seat': ['7C', '7D'], 'return_flight': ret.pk}
+        for s in ['3A', '3B']:
+            data.update({f'first_name_{s}': 'ა', f'last_name_{s}': 'ბ', f'passport_{s}': '01001'})
+        self.client.post(reverse('book', args=[self.flight.pk]), data)
+        b = Booking.objects.get()
+        self.assertEqual(b.return_flight, ret)
+        self.assertEqual(b.total_price, self.flight.economy_price * 2 + ret.economy_price * 2)
+        self.assertEqual({'7C', '7D'}, ret.taken_seats())
+        self.assertEqual(self.client.get(reverse('profile')).status_code, 200)
+
+    def test_round_trip_seat_count_must_match(self):
+        ret = self._make_return()
+        self.login()
+        data = {'seat': ['3A', '3B'], 'return_seat': ['7C'], 'return_flight': ret.pk}
+        for s in ['3A', '3B']:
+            data.update({f'first_name_{s}': 'ა', f'last_name_{s}': 'ბ', f'passport_{s}': '01001'})
+        self.client.post(reverse('book', args=[self.flight.pk]), data)
+        self.assertEqual(Booking.objects.count(), 0)
 
     def test_cannot_cancel_others_booking(self):
         self.login()

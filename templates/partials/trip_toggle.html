@@ -1,0 +1,9 @@
+<div class="trip-toggle">
+  {% for radio in form.trip_type %}
+    <label>
+      <input type="radio" name="{{ radio.data.name }}" value="{{ radio.data.value }}"
+             {% if radio.data.selected or not form.trip_type.value and forloop.first %}checked{% endif %}>
+      <span>{{ radio.choice_label }}</span>
+    </label>
+  {% endfor %}
+</div>

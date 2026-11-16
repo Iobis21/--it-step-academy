@@ -1,4 +1,4 @@
-<a class="card flight-card" href="{% url 'flight_detail' flight.pk %}">
+<a class="card flight-card" href="{% if link_base %}{{ link_base }}{{ flight.pk }}{% else %}{% url 'flight_detail' flight.pk %}{{ link_suffix }}{% endif %}">
   <img src="{{ flight.destination.image_url }}" alt="{{ flight.destination.name }}" loading="lazy">
   <div class="body">
     <div class="airline">{{ flight.airline.name }} · {{ flight.flight_number }}</div>
