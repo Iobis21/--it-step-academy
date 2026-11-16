@@ -244,6 +244,36 @@ class BookingFlowTests(TestCase):
         self._book_with_bags(self.flight, '5A', False, 9)
         self.assertEqual(Booking.objects.count(), 0)
 
+    # ===== API =====
+    def test_api_lists(self):
+        self.assertEqual(self.client.get('/api/').status_code, 200)
+        self.assertEqual(len(self.client.get('/api/cities/').json()), 10)
+        self.assertTrue(self.client.get('/api/airlines/').json())
+
+    def test_api_flight_search_and_detail(self):
+        f = self.flight
+        data = self.client.get('/api/flights/', {'from': f.origin.airport_code.lower(),
+                                                 'date': f.departure_time.date().isoformat()}).json()
+        self.assertIn(f.id, [x['id'] for x in data['results']])
+        self.assertTrue(all(x['from']['code'] == f.origin.airport_code for x in data['results']))
+        self.assertEqual(self.client.get('/api/flights/', {'date': 'bad'}).status_code, 400)
+        d = self.client.get(f'/api/flights/{f.id}/').json()
+        self.assertEqual(d['seats']['total'], 84)
+        self.assertIn('economy', d['baggage'])
+        self.assertEqual(self.client.get('/api/flights/999999/').status_code, 404)
+
+    def test_api_ticket(self):
+        self.login()
+        self.book(['5A'])
+        b = Booking.objects.get()
+        self.assertEqual(self.client.get(f'/api/tickets/{b.pnr}/').status_code, 400)
+        self.assertEqual(self.client.get(f'/api/tickets/{b.pnr}/', {'last_name': 'სხვა'}).status_code, 404)
+        d = self.client.get(f'/api/tickets/{b.pnr.lower()}/', {'last_name': 'ბ'}).json()
+        self.assertEqual(d['ticket_number'], b.pnr)
+        self.assertEqual(d['legs'][0]['passengers'][0]['seat'], '5A')
+        self.assertNotIn('passport', str(d))
+        self.assertIn('5A', self.client.get(f'/api/flights/{self.flight.id}/').json()['seats']['taken'])
+
     def test_cannot_cancel_others_booking(self):
         self.login()
         self.book(['4C'])
