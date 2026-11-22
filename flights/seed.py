@@ -73,6 +73,23 @@ def duration_minutes(km, stops, rnd):
     return int(round(minutes / 5) * 5)
 
 
+def regenerate_future_flights(City, Airline, Flight, **kwargs):
+    """მომავალი ფრენების (ჯავშნის გარეშე) წაშლა და თავიდან შექმნა.
+
+    PostgreSQL-ზე ვიყენებთ ბლოკს (advisory lock), რომ სერვერის რამდენიმე ასლმა
+    ერთდროულად ორჯერ არ შექმნას ფრენები.
+    """
+    from django.db import connection, transaction
+
+    with transaction.atomic():
+        if connection.vendor == 'postgresql':
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_xact_lock(424242)')
+        Flight.objects.filter(bookings__isnull=True, return_bookings__isnull=True,
+                              departure_time__gt=timezone.now()).delete()
+        return generate_flights(City, Airline, Flight, **kwargs)
+
+
 def all_routes():
     """ყველა მარშრუტი: საქართველო ⇄ საზღვარგარეთი (ორივე მიმართულებით) + შიდა რეისები."""
     georgian = [code for _, code, _, _, is_georgian in CITIES if is_georgian]

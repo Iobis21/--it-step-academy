@@ -1,8 +1,7 @@
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
 from flights.models import Airline, City, Flight
-from flights.seed import generate_flights
+from flights.seed import regenerate_future_flights
 
 
 class Command(BaseCommand):
@@ -14,7 +13,5 @@ class Command(BaseCommand):
 
     def handle(self, *args, days, max_per_route, **options):
         # მომავალი ფრენები, რომლებზეც ჯავშანი არ არის, იშლება და თავიდან იქმნება
-        Flight.objects.filter(bookings__isnull=True, return_bookings__isnull=True,
-                              departure_time__gt=timezone.now()).delete()
-        count = generate_flights(City, Airline, Flight, days=days, max_per_route=max_per_route)
+        count = regenerate_future_flights(City, Airline, Flight, days=days, max_per_route=max_per_route)
         self.stdout.write(self.style.SUCCESS(f'შეიქმნა {count} ფრენა'))
