@@ -73,9 +73,25 @@ def duration_minutes(km, stops, rnd):
     return int(round(minutes / 5) * 5)
 
 
-def generate_flights(City, Airline, Flight, days=30, per_day=8, seed=42):
+def all_routes():
+    """ყველა მარშრუტი: საქართველო ⇄ საზღვარგარეთი (ორივე მიმართულებით) + შიდა რეისები."""
+    georgian = [code for _, code, _, _, is_georgian in CITIES if is_georgian]
+    foreign = [code for _, code, _, _, is_georgian in CITIES if not is_georgian]
+    routes = []
+    for g in georgian:
+        for f in foreign:
+            routes.append((g, f))
+            routes.append((f, g))
+        for g2 in georgian:
+            if g != g2:
+                routes.append((g, g2))
+    return routes
+
+
+def generate_flights(City, Airline, Flight, days=60, max_per_route=2, seed=None):
+    """ყოველ მარშრუტზე ყოველდღე 1-დან max_per_route-მდე ფრენა, შემთხვევით დროს."""
     rnd = random.Random(seed)
-    coords = {code: (c, georgian) for _, code, _, c, georgian in CITIES}
+    coords = {code: c for _, code, _, c, _ in CITIES}
 
     cities = {}
     for name, code, img, _, _ in CITIES:
@@ -85,40 +101,39 @@ def generate_flights(City, Airline, Flight, days=30, per_day=8, seed=42):
         airlines[code] = (Airline.objects.update_or_create(
             code=code, defaults={'name': name, 'low_cost': code in LOW_COST})[0], factor)
 
-    georgian = [c for c, (_, g) in coords.items() if g]
-    foreign = [c for c, (_, g) in coords.items() if not g]
-
     today = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
     flights = []
     for day in range(1, days + 1):
-        for _ in range(per_day):
-            if rnd.random() < 0.15:
-                # შიდა რეისი
-                a, b = rnd.sample(georgian, 2)
-                airline_code = DOMESTIC_AIRLINE
-            else:
-                a, b = rnd.choice(georgian), rnd.choice(foreign)
-                airline_code = rnd.choice(ROUTES[b])
-                if rnd.random() < 0.5:
-                    a, b = b, a  # დაბრუნების რეისი
-
-            airline, factor = airlines[airline_code]
-            km = distance_km(coords[a][0], coords[b][0])
-            # დუბაი/სტამბოლი პირდაპირია, ევროპა ზოგჯერ გადაჯდომით (არა ლოუქოსტერზე)
-            stops = 1 if (km > 2000 and airline_code not in ('W6', 'A9') and rnd.random() < 0.4) else 0
-
-            dep = today + timedelta(days=day, hours=rnd.randint(4, 23), minutes=rnd.choice([0, 15, 30, 45]))
-            price = economy_price(km, factor, stops, rnd)
-            flights.append(Flight(
-                flight_number=f'{airline_code}{rnd.randint(100, 999)}',
-                airline=airline,
-                origin=cities[a],
-                destination=cities[b],
-                departure_time=dep,
-                arrival_time=dep + timedelta(minutes=duration_minutes(km, stops, rnd)),
-                stops=stops,
-                economy_price=price,
-                business_price=round(price * rnd.uniform(2.8, 3.5) / 10) * 10 - 1,
-            ))
-    Flight.objects.bulk_create(flights)
+        for a, b in all_routes():
+            for _ in range(rnd.randint(1, max_per_route)):
+                if b in ROUTES:
+                    airline_code = rnd.choice(ROUTES[b])
+                elif a in ROUTES:
+                    airline_code = rnd.choice(ROUTES[a])
+                else:
+                    airline_code = DOMESTIC_AIRLINE
+                flights.append(make_flight(Flight, rnd, today, day, a, b, coords, cities, airlines[airline_code], airline_code))
+    Flight.objects.bulk_create(flights, batch_size=500)
     return len(flights)
+
+
+def make_flight(Flight, rnd, today, day, a, b, coords, cities, airline_info, airline_code):
+    airline, factor = airline_info
+    km = distance_km(coords[a], coords[b])
+    # ევროპა/დუბაი ზოგჯერ გადაჯდომით (არა ლოუქოსტერზე და არა Georgian Airways-ზე)
+    stops = 1 if (km > 2000 and airline_code not in ('W6', 'A9') and rnd.random() < 0.4) else 0
+    # გაფრენა დღის ნებისმიერ დროს: 00:00-დან 23:45-მდე
+    dep = today + timedelta(days=day, hours=rnd.randint(0, 23), minutes=rnd.choice([0, 15, 30, 45]))
+    price = economy_price(km, factor, stops, rnd)
+    return Flight(
+        flight_number=f'{airline_code}{rnd.randint(100, 999)}',
+        airline=airline,
+        origin=cities[a],
+        destination=cities[b],
+        departure_time=dep,
+        arrival_time=dep + timedelta(minutes=duration_minutes(km, stops, rnd)),
+        stops=stops,
+        economy_price=price,
+        business_price=round(price * rnd.uniform(2.8, 3.5) / 10) * 10 - 1,
+    )
+

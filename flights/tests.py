@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.core import mail
 from django.core.management import call_command
 from django.test import TestCase
+from django.utils import timezone
 from django.urls import reverse
 
 from accounts.models import User
@@ -12,7 +13,7 @@ from .models import Booking, Flight
 class BookingFlowTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        call_command('seed_flights', days=3, per_day=4, verbosity=0)
+        call_command('seed_flights', days=2, max_per_route=1, verbosity=0)
         cls.flight = Flight.objects.first()
 
     def login(self, email='t@t.ge', phone='599123456'):
@@ -118,7 +119,7 @@ class BookingFlowTests(TestCase):
 
     def test_return_search_and_detail_pages(self):
         ret = self._make_return()
-        d = ret.departure_time.date().isoformat()
+        d = timezone.localtime(ret.departure_time).date().isoformat()
         r = self.client.get('/search/', {'trip_type': 'return', 'return_date': d})
         self.assertContains(r, f'return_date={d}')
         r = self.client.get(f'/flights/{self.flight.pk}/', {'return_date': d})
@@ -187,12 +188,30 @@ class BookingFlowTests(TestCase):
         self.login()
         self.book(['5A'])
         b = Booking.objects.get()
-        r = self.pay(b, card_number='4242 4242 4242 4241')
-        self.assertContains(r, 'ბარათის ნომერი არასწორია')
+        r = self.pay(b, card_number='1234 5678')
+        self.assertContains(r, 'ბარათის ნომერი უნდა იყოს 13-19 ციფრი')
+        # ნებისმიერი 16-ციფრიანი ბარათი მიიღება — ამას ქვემოთ ვამოწმებთ
         r = self.pay(b, expiry='01/20')
         self.assertContains(r, 'ვადა გაუვიდა')
         b.refresh_from_db()
         self.assertEqual(b.status, 'pending')
+
+    def test_any_card_number_accepted(self):
+        self.login()
+        self.book(['5A'])
+        b = Booking.objects.get()
+        self.pay(b, card_number='1234 5678 9012 3456')
+        b.refresh_from_db()
+        self.assertEqual((b.status, b.card_last4), ('active', '3456'))
+
+    def test_every_route_has_flight_every_day(self):
+        from flights.seed import all_routes
+        for day in range(1, 3):
+            date = (timezone.localtime() + timedelta(days=day)).date()
+            for a, b in all_routes():
+                exists = Flight.objects.filter(origin__airport_code=a, destination__airport_code=b,
+                                               departure_time__date=date).exists()
+                self.assertTrue(exists, f'{a}->{b} {date}')
 
     def test_unpaid_booking_expires_and_frees_seats(self):
         self.login()
@@ -286,7 +305,7 @@ class BookingFlowTests(TestCase):
     def test_api_flight_search_and_detail(self):
         f = self.flight
         data = self.client.get('/api/flights/', {'from': f.origin.airport_code.lower(),
-                                                 'date': f.departure_time.date().isoformat()}).json()
+                                                 'date': timezone.localtime(f.departure_time).date().isoformat()}).json()
         self.assertIn(f.id, [x['id'] for x in data['results']])
         self.assertTrue(all(x['from']['code'] == f.origin.airport_code for x in data['results']))
         self.assertEqual(self.client.get('/api/flights/', {'date': 'bad'}).status_code, 400)

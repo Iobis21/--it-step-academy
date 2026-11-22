@@ -53,24 +53,6 @@ class CheckInForm(forms.Form):
         return self.cleaned_data['pnr'].strip().upper()
 
 
-def luhn_valid(number):
-    """ბარათის ნომრის შემოწმება Luhn-ის ალგორითმით (ასე ამოწმებენ ნამდვილ ბარათებსაც).
-
-    მარჯვნიდან ყოველ მეორე ციფრს ვაორმაგებთ (თუ 9-ზე მეტია, ვაკლებთ 9-ს),
-    ყველაფერს ვკრებთ — ჯამი 10-ზე უნდა იყოფოდეს.
-    """
-    total = 0
-    digits = number[::-1]  # შებრუნებული
-    for i in range(len(digits)):
-        d = int(digits[i])
-        if i % 2 == 1:
-            d = d * 2
-            if d > 9:
-                d = d - 9
-        total += d
-    return total % 10 == 0
-
-
 class PaymentForm(forms.Form):
     """ფიქტიური გადახდა. ბარათის მონაცემები არ ინახება — მხოლოდ ბოლო 4 ციფრი."""
     card_name = forms.CharField(label='ბარათის მფლობელი', max_length=60,
@@ -83,10 +65,9 @@ class PaymentForm(forms.Form):
 
     def clean_card_number(self):
         number = self.cleaned_data['card_number'].replace(' ', '').replace('-', '')
+        # ფიქტიური გადახდა: მიიღება ნებისმიერი ბარათი — ვამოწმებთ მხოლოდ, რომ 13-19 ციფრია
         if not number.isdigit() or len(number) < 13 or len(number) > 19:
-            raise forms.ValidationError('ბარათის ნომერი არასწორია')
-        if not luhn_valid(number):
-            raise forms.ValidationError('ბარათის ნომერი არასწორია')
+            raise forms.ValidationError('ბარათის ნომერი უნდა იყოს 13-19 ციფრი')
         return number
 
     def clean_expiry(self):
